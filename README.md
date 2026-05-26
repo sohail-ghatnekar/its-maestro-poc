@@ -1,5 +1,15 @@
 # Demo Title
 
+## Benefits Case Management Prototype
+
+Local React click-through app:
+
+```bash
+cd OtherComponents/BenefitsCaseManagementPrototype
+npm install
+npm run dev
+```
+
 Confluence page:
 
 
