@@ -17,3 +17,48 @@ body {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+.maestro-bpmn-viewer .djs-container {
+  height: 100% !important;
+  width: 100% !important;
+}
+
+.maestro-bpmn-viewer .maestro-status-completed .djs-visual > rect,
+.maestro-bpmn-viewer .maestro-status-completed .djs-visual > circle,
+.maestro-bpmn-viewer .maestro-status-completed .djs-visual > ellipse,
+.maestro-bpmn-viewer .maestro-status-completed .djs-visual > polygon,
+.maestro-bpmn-viewer .maestro-status-completed .djs-visual > path {
+  fill: #ecfdf3 !important;
+  stroke: #16a34a !important;
+  stroke-width: 3px !important;
+}
+
+.maestro-bpmn-viewer .maestro-status-in-progress .djs-visual > rect,
+.maestro-bpmn-viewer .maestro-status-in-progress .djs-visual > circle,
+.maestro-bpmn-viewer .maestro-status-in-progress .djs-visual > ellipse,
+.maestro-bpmn-viewer .maestro-status-in-progress .djs-visual > polygon,
+.maestro-bpmn-viewer .maestro-status-in-progress .djs-visual > path {
+  fill: #eff6ff !important;
+  stroke: #2563eb !important;
+  stroke-width: 3px !important;
+}
+
+.maestro-bpmn-viewer .maestro-status-faulted .djs-visual > rect,
+.maestro-bpmn-viewer .maestro-status-faulted .djs-visual > circle,
+.maestro-bpmn-viewer .maestro-status-faulted .djs-visual > ellipse,
+.maestro-bpmn-viewer .maestro-status-faulted .djs-visual > polygon,
+.maestro-bpmn-viewer .maestro-status-faulted .djs-visual > path {
+  fill: #fef2f2 !important;
+  stroke: #dc2626 !important;
+  stroke-width: 3px !important;
+}
+
+.maestro-bpmn-viewer .maestro-status-unknown .djs-visual > rect,
+.maestro-bpmn-viewer .maestro-status-unknown .djs-visual > circle,
+.maestro-bpmn-viewer .maestro-status-unknown .djs-visual > ellipse,
+.maestro-bpmn-viewer .maestro-status-unknown .djs-visual > polygon,
+.maestro-bpmn-viewer .maestro-status-unknown .djs-visual > path {
+  fill: #f3f4f6 !important;
+  stroke: #6b7280 !important;
+  stroke-width: 3px !important;
+}

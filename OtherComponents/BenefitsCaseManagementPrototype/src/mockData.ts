@@ -24,10 +24,17 @@ export type ExceptionType =
   | 'Clearance Match'
   | 'Due Soon'
   | 'Supervisor Review'
-  | 'WMS Pending'
   | 'None';
 
-export type ChecklistStatus = 'Complete' | 'Needs Review' | 'Blocked' | 'Not Started';
+export type ChecklistStatus =
+  | 'Complete'
+  | 'Completed'
+  | 'In Process'
+  | 'In Progress'
+  | 'Pending'
+  | 'Needs Review'
+  | 'Blocked'
+  | 'Not Started';
 
 export type DocumentStatus =
   | 'Uploaded'
@@ -44,22 +51,12 @@ export type ValidationStatus =
   | 'Discrepancy Found'
   | 'Worker Review Required';
 
-export type TransactionStatus =
-  | 'Not Submitted'
-  | 'Submitted'
-  | 'Batch Pending'
-  | 'Accepted'
-  | 'Rejected'
-  | 'Corrected'
-  | 'Finalized';
-
 export type AuditCategory =
   | 'Worker actions'
   | 'System actions'
   | 'Supervisor actions'
   | 'Document events'
-  | 'Notice events'
-  | 'Transaction events';
+  | 'Notice events';
 
 export interface HouseholdMember {
   name: string;
@@ -84,6 +81,15 @@ export interface ExpenseEntry {
   verified: boolean;
 }
 
+export type DocumentMimeType = 'application/pdf' | 'image/jpeg' | 'image/png';
+
+export interface UiPathDocumentReference {
+  repository: string;
+  folderPath: string;
+  documentId: string;
+  resolver: string;
+}
+
 export interface DocumentRecord {
   id: string;
   name: string;
@@ -102,6 +108,11 @@ export interface DocumentRecord {
     confidenceScore: number;
   };
   notes: string[];
+  mimeType?: DocumentMimeType;
+  caseFileUrl?: string;
+  localFallbackUrl?: string;
+  localSourcePath?: string;
+  uiPathDocumentRef?: UiPathDocumentReference;
 }
 
 export interface ClearanceScenario {
@@ -179,6 +190,11 @@ export interface BenefitCase {
     signatureStatus: string;
     responses: Array<{ label: string; value: string }>;
     submittedDocumentsSummary: string;
+    mimeType?: DocumentMimeType;
+    caseFileUrl?: string;
+    localFallbackUrl?: string;
+    localSourcePath?: string;
+    uiPathDocumentRef?: UiPathDocumentReference;
   };
   interview: {
     status: string;
@@ -202,13 +218,6 @@ export interface BenefitCase {
     notes: string[];
   };
   notices: NoticeRecord[];
-  transaction: {
-    readiness: string;
-    submissionStatus: TransactionStatus;
-    batchStatus: string;
-    finalStatus: string;
-    lastUpdated: string;
-  };
   timeline: TimelineEvent[];
 }
 
@@ -240,7 +249,6 @@ export const exceptionOptions: ExceptionType[] = [
   'Clearance Match',
   'Due Soon',
   'Supervisor Review',
-  'WMS Pending',
   'None',
 ];
 
@@ -274,7 +282,6 @@ const baseChecklist: Array<{ label: string; status: ChecklistStatus }> = [
   { label: 'External validations reviewed', status: 'Not Started' },
   { label: 'Budget reviewed', status: 'Not Started' },
   { label: 'Notice prepared', status: 'Not Started' },
-  { label: 'Transaction submitted', status: 'Not Started' },
 ];
 
 function createTimeline(caseId: string, applicantName: string, status: CaseStatus): TimelineEvent[] {
@@ -389,6 +396,95 @@ function standardDocuments(caseId: string, applicantName: string, paystubConfide
   ];
 }
 
+function motoristDocuments(caseId: string): DocumentRecord[] {
+  return [
+    {
+      id: `${caseId}-doc-id`,
+      name: "Driver's License",
+      type: 'Identity',
+      person: 'Michael M. Motorist',
+      receivedDate: '2026-05-26',
+      reusable: true,
+      confidence: 96,
+      status: 'Verified',
+      extractedValues: {
+        name: 'Michael M. Motorist',
+        date: '2029-08-31',
+        amount: 'N/A',
+        employer: 'N/A',
+        address: '2345 Anywhere Street Apt 2B, Your City, NY 12345',
+        confidenceScore: 96,
+      },
+      notes: ['Identity evidence matches Michael M. Motorist and SSN suffix 6565.'],
+      mimeType: 'image/jpeg',
+      uiPathDocumentRef: {
+        repository: 'UiPath Orchestrator Storage Bucket',
+        folderPath: '3056236:197598',
+        documentId: 'fake-license.jpg',
+        resolver: 'https://staging.uipath.com/uipathlabs/Playground/orchestrator_/buckets/197598/browse?tid=555693&fid=3056236',
+      },
+    },
+    {
+      id: `${caseId}-doc-paystub`,
+      name: 'Paystub',
+      type: 'Income',
+      person: 'Michael M. Motorist',
+      receivedDate: '2026-05-26',
+      reusable: false,
+      confidence: 95,
+      status: 'Uploaded',
+      extractedValues: {
+        name: 'Michael M. Motorist',
+        date: '05/26/26',
+        amount: '$1,000.00',
+        employer: 'Sample Company Name',
+        address: 'Sample Company Address, 95220',
+        confidenceScore: 95,
+      },
+      notes: [
+        'Pay period 05/19/26-05/25/26; rate $25.00; 40.00 hours.',
+        'Total deductions $290.26; net pay $709.74; YTD gross $21,000.00.',
+      ],
+      mimeType: 'application/pdf',
+      uiPathDocumentRef: {
+        repository: 'UiPath Orchestrator Storage Bucket',
+        folderPath: '3056236:197598',
+        documentId: 'Michael_Motorist_Pay_Stub_SAMPLE.pdf',
+        resolver: 'https://staging.uipath.com/uipathlabs/Playground/orchestrator_/buckets/197598/browse?tid=555693&fid=3056236',
+      },
+    },
+    {
+      id: `${caseId}-doc-utility`,
+      name: 'National Grid Utility Bill',
+      type: 'Proof of Residency',
+      person: 'Michael M. Motorist',
+      receivedDate: '2026-05-26',
+      reusable: false,
+      confidence: 94,
+      status: 'Uploaded',
+      extractedValues: {
+        name: 'Michael M. Motorist',
+        date: 'Jun 6, 2026',
+        amount: '$189.68',
+        employer: 'National Grid',
+        address: '2345 Anywhere Street Apt 2B, Your City, NY 12345',
+        confidenceScore: 94,
+      },
+      notes: [
+        'Billing period Apr 12, 2026 to May 11, 2026.',
+        'Electric total $76.30; gas total $113.38; current charges $189.68.',
+      ],
+      mimeType: 'application/pdf',
+      uiPathDocumentRef: {
+        repository: 'UiPath Orchestrator Storage Bucket',
+        folderPath: '3056236:197598',
+        documentId: 'Michael_Motorist_National_Grid_Utility_SAMPLE.pdf',
+        resolver: 'https://staging.uipath.com/uipathlabs/Playground/orchestrator_/buckets/197598/browse?tid=555693&fid=3056236',
+      },
+    },
+  ];
+}
+
 function defaultClearance(caseId: string, applicantName: string): ClearanceScenario[] {
   return [
     {
@@ -442,6 +538,59 @@ function defaultClearance(caseId: string, applicantName: string): ClearanceScena
   ];
 }
 
+function motoristClearance(caseId: string): ClearanceScenario[] {
+  return [
+    {
+      id: `${caseId}-match-michael`,
+      title: 'High-confidence match',
+      householdMember: 'Michael M. Motorist',
+      candidate: 'Michael M. Motorist',
+      identifier: 'CIN-6565',
+      matchScore: 97,
+      criteria: ['Name', 'Date of birth', 'Address', 'Last four SSN'],
+      mismatches: [],
+      recommendedAction: 'Accept match',
+      status: 'Open',
+    },
+    {
+      id: `${caseId}-match-sarah`,
+      title: 'Possible match',
+      householdMember: 'Sarah A. Motorist',
+      candidate: 'Sarah Motorist',
+      identifier: 'CIN-1122',
+      matchScore: 84,
+      criteria: ['Name', 'Last four SSN', 'Household address'],
+      mismatches: ['Prior county record needs worker confirmation'],
+      recommendedAction: 'View details and accept match if household relationship is confirmed',
+      status: 'Open',
+    },
+    {
+      id: `${caseId}-match-emma`,
+      title: 'High-confidence match',
+      householdMember: 'Emma L. Motorist',
+      candidate: 'Emma L. Motorist',
+      identifier: 'SIN-3344',
+      matchScore: 95,
+      criteria: ['Name', 'Date of birth', 'School-aged dependent', 'Last four SSN'],
+      mismatches: [],
+      recommendedAction: 'Accept match',
+      status: 'Open',
+    },
+    {
+      id: `${caseId}-match-none`,
+      title: 'No match / assign new identifier',
+      householdMember: 'Additional household member',
+      candidate: 'No candidate found',
+      identifier: 'Unassigned',
+      matchScore: 0,
+      criteria: [],
+      mismatches: ['No additional household member reported'],
+      recommendedAction: 'No new identifier needed unless new member is added',
+      status: 'Open',
+    },
+  ];
+}
+
 function defaultValidations(caseId: string): ValidationResult[] {
   const discrepancy = caseId === 'MYB-1004' || caseId === 'MYB-1002';
 
@@ -473,6 +622,35 @@ function defaultValidations(caseId: string): ValidationResult[] {
   ];
 }
 
+function motoristValidations(): ValidationResult[] {
+  return [
+    {
+      name: 'Employment / UIB Check',
+      status: 'Worker Review Required',
+      summary: 'Michael reports warehouse employment and Sarah reports fluctuating part-time retail income.',
+      lastRun: '2026-05-26 02:10 PM',
+    },
+    {
+      name: 'Tax Record Check',
+      status: 'Complete',
+      summary: 'Household composition found for Michael, Sarah, and Emma Motorist.',
+      lastRun: '2026-05-26 02:12 PM',
+    },
+    {
+      name: 'Paystub Comparison',
+      status: 'Complete',
+      summary: 'Michael paystub gross wages match the reported $1,000 weekly income.',
+      lastRun: '2026-05-26 02:14 PM',
+    },
+    {
+      name: 'Data Discrepancy Summary',
+      status: 'Worker Review Required',
+      summary: 'Review Sarah fluctuating income and National Grid utility expense before budget.',
+      lastRun: '2026-05-26 02:16 PM',
+    },
+  ];
+}
+
 function defaultNotices(caseId: string): NoticeRecord[] {
   return [
     {
@@ -492,7 +670,7 @@ function defaultNotices(caseId: string): NoticeRecord[] {
   ];
 }
 
-export const initialCases: BenefitCase[] = [
+const primaryCases: BenefitCase[] = [
   {
     id: 'case-1001',
     mybNumber: 'MYB-1001',
@@ -573,13 +751,6 @@ export const initialCases: BenefitCase[] = [
       notes: ['Budget is ready for final eligibility review.'],
     },
     notices: defaultNotices('MYB-1001'),
-    transaction: {
-      readiness: 'Ready after notice approval',
-      submissionStatus: 'Not Submitted',
-      batchStatus: 'Not queued',
-      finalStatus: 'Open',
-      lastUpdated: '2026-05-25 02:15 PM',
-    },
     timeline: createTimeline('MYB-1001', 'Adrian Miller', 'Ready for Budget'),
   },
   {
@@ -653,13 +824,6 @@ export const initialCases: BenefitCase[] = [
       notes: ['Expedited eligibility can proceed after missing fields are resolved.'],
     },
     notices: defaultNotices('MYB-1002'),
-    transaction: {
-      readiness: 'Blocked by expedited review',
-      submissionStatus: 'Not Submitted',
-      batchStatus: 'Not queued',
-      finalStatus: 'Open',
-      lastUpdated: '2026-05-25 04:20 PM',
-    },
     timeline: createTimeline('MYB-1002', 'Bianca Torres', 'Pending Review'),
   },
   {
@@ -737,113 +901,149 @@ export const initialCases: BenefitCase[] = [
       notes: ['Budget cannot be finalized until signature is received.'],
     },
     notices: defaultNotices('MYB-1003'),
-    transaction: {
-      readiness: 'Blocked by missing signature',
-      submissionStatus: 'Not Submitted',
-      batchStatus: 'Not queued',
-      finalStatus: 'Open',
-      lastUpdated: '2026-05-25 11:05 AM',
-    },
     timeline: createTimeline('MYB-1003', 'Camila Reed', 'Missing Information'),
   },
   {
     id: 'case-1004',
     mybNumber: 'MYB-1004',
-    applicantName: 'Devon Brooks',
-    description: 'Blurry paystub, document review required',
+    applicantName: 'Michael M. Motorist',
+    description: 'Motorist SNAP application with paystub and National Grid utility review',
     county: 'Monroe',
     region: 'Finger Lakes',
-    filingDate: '2026-05-21',
-    eligibilityDueDate: '2026-05-29',
+    filingDate: '2026-05-26',
+    eligibilityDueDate: '2026-06-24',
     status: 'Document Review',
-    currentStage: 'Income Document Review',
+    currentStage: 'Paystub and Utility Review',
     assignedGroup: 'Document Review',
     assignedWorker: 'Priya Shah',
     priority: 'High',
     exception: 'OCR Review',
     expedited: false,
     program: 'SNAP',
-    currentBlockers: ['Paystub image is blurry and below confidence threshold.'],
+    currentBlockers: [
+      'National Grid utility bill needs worker review for utility expense handling.',
+      'Sarah Motorist part-time income fluctuates and should be reviewed before budget.',
+    ],
     applicant: {
-      email: 'devon.brooks@example.test',
-      phone: '(585) 555-0198',
-      address: '500 East Avenue, Rochester, NY 14607',
+      email: 'michael.motorist@example.test',
+      phone: '(555) 555-1234',
+      address: '2345 Anywhere Street Apt 2B, Your City, NY 12345',
       preferredLanguage: 'English',
-      contactPreference: 'Email',
+      contactPreference: 'Phone',
     },
     household: [
-      { name: 'Devon Brooks', relationship: 'Self', age: 31, applying: true, identifierStatus: 'Matched CIN-550903' },
-      { name: 'Sam Brooks', relationship: 'Child', age: 4, applying: true, identifierStatus: 'Matched SIN-449100' },
+      { name: 'Michael M. Motorist', relationship: 'Self', age: 47, applying: true, identifierStatus: 'SSN XXX-XX-6565; DOB 08/31/1978; married; applying' },
+      { name: 'Sarah A. Motorist', relationship: 'Spouse', age: 46, applying: true, identifierStatus: 'SSN XXX-XX-1122; DOB 04/11/1980; married; applying' },
+      { name: 'Emma L. Motorist', relationship: 'Daughter', age: 14, applying: true, identifierStatus: 'SSN XXX-XX-3344; DOB 02/15/2012; school-aged dependent' },
     ],
     income: [
-      { source: 'Warehouse wages', person: 'Devon Brooks', frequency: 'Biweekly', grossAmount: '$1,420.00', verified: false },
+      { source: 'Employment - Warehouse Associate', person: 'Michael Motorist', frequency: 'Weekly', grossAmount: '$1,000.00', verified: true },
+      { source: 'Part-Time Retail', person: 'Sarah Motorist', frequency: 'Bi-Weekly', grossAmount: '$600.00', verified: false },
     ],
     expenses: [
       { type: 'Rent', amount: '$1,250.00', frequency: 'Monthly', verified: true },
-      { type: 'Child care', amount: '$300.00', frequency: 'Monthly', verified: false },
+      { type: 'Child / dependent care', amount: '$250.00', frequency: 'Monthly', verified: true },
+      { type: 'National Grid utility charges', amount: '$189.68', frequency: 'Monthly', verified: false },
     ],
     checklist: baseChecklist.map((item) => ({
       ...item,
       status: item.label === 'Application reviewed'
         ? 'Complete'
         : item.label === 'Documents reviewed'
-          ? 'Blocked'
+          ? 'Needs Review'
+          : item.label === 'Interview complete'
+            ? 'Complete'
           : item.status,
     })),
     application: {
       signatureStatus: 'Signed electronically',
       responses: [
-        { label: 'Employment', value: 'Warehouse wages with recent paystub uploaded.' },
-        { label: 'Child care', value: 'Monthly child care expense reported.' },
-        { label: 'Shelter expense', value: 'Rent and utilities reported.' },
+        { label: 'Apply / Recertify', value: 'Apply' },
+        { label: 'Legal Name', value: 'Michael M. Motorist; also known as Mike Motorist.' },
+        { label: 'Telephone Numbers', value: 'Primary (555) 555-1234; other phone (555) 555-5678.' },
+        { label: 'Residence Address', value: '2345 Anywhere Street Apt 2B, Your City, NY 12345.' },
+        { label: 'Mailing Address', value: 'Same as residence.' },
+        { label: 'Notices In', value: 'English Only.' },
+        { label: 'Applicant Signature', value: 'Michael M. Motorist signed on 05/26/2026.' },
+        { label: 'Household Members', value: 'Michael, spouse Sarah, and daughter Emma are applying and buy/prepare food together.' },
+        { label: 'Citizenship', value: 'Everyone in household is a U.S. citizen.' },
+        { label: 'SNAP / TA Elsewhere', value: 'No one is applying elsewhere for SNAP or TA.' },
+        { label: 'Veteran / Facility Status', value: 'No veterans and no one in treatment or a group facility.' },
+        { label: 'Michael Income', value: 'Warehouse Associate, 160 hours/month, weekly gross $1,000.00.' },
+        { label: 'Sarah Income', value: 'Part-Time Retail, 80 hours/month, bi-weekly gross $600.00; schedule fluctuates.' },
+        { label: 'Child Care', value: 'Emma Motorist child/dependent care cost is $250 monthly.' },
+        { label: 'Job / Strike Questions', value: 'No recent job change, no potential income not received, and not participating in a strike.' },
+        { label: 'Foster / Boarder Questions', value: 'No foster care at age 18 and no boarder/foster child/adult reported.' },
+        { label: 'Cash / Accounts', value: '$2,412.17 belonging to Michael and Sarah Motorist.' },
+        { label: 'Vehicle', value: '2018 Toyota Camry owned by Michael Motorist.' },
+        { label: 'Property Transfers', value: 'No home/property ownership and no recent sale or transfer.' },
+        { label: 'Education / Language', value: 'Michael education code 1, Sarah education code 2, primary language English.' },
+        { label: 'Shelter', value: 'Renting; monthly rent $1,250; pays separately for heat, air conditioning, and utilities.' },
+        { label: 'Heating', value: 'Gas heat with National Grid.' },
+        { label: 'Expenses Paid By Others', value: 'No one else pays household expenses; no child support paid.' },
+        { label: 'Disabled / 60+', value: 'No one is disabled or age 60+.' },
+        { label: 'Medicaid Spenddown', value: 'No.' },
+        { label: 'School Child', value: 'Emma Motorist is 16/17 school question marked Yes; Your City Middle School.' },
+        { label: 'College / Training', value: 'No adults attending college or training.' },
+        { label: 'Pregnancy / Work Limitation', value: 'No pregnancy and no medical conditions limiting work.' },
+        { label: 'Legal / Disqualification Questions', value: 'No probation/parole violation, SNAP fraud disqualification, firearm/drug trade, sale over $500, or duplicate benefits fraud.' },
+        { label: 'Final Signature', value: 'Michael M. Motorist signed final attestation on 05/26/2026.' },
+        { label: 'Additional Info', value: 'Household applies for SNAP assistance; Sarah income fluctuates; Emma is a minor dependent enrolled full time.' },
+        { label: 'Voter Registration', value: 'No - already registered.' },
       ],
-      submittedDocumentsSummary: 'Application, identity, lease, birth certificate, and low-confidence paystub received.',
+      submittedDocumentsSummary: 'SNAP application, driver license identity evidence, Michael paystub, and National Grid utility bill received. Birth certificate and lease proof are not required for this case because identity and utility evidence are already present.',
+      mimeType: 'application/pdf',
+      uiPathDocumentRef: {
+        repository: 'UiPath Orchestrator Storage Bucket',
+        folderPath: '3056236:197694',
+        documentId: 'Fake_SNAP_App_Completed.pdf',
+        resolver: 'https://staging.uipath.com/uipathlabs/Playground/orchestrator_/buckets/197694/browse?tid=555693&fid=3056236',
+      },
     },
     interview: {
       status: 'Complete',
       method: 'Phone',
-      scheduledAt: '2026-05-22 01:30 PM',
-      missingFields: ['Readable paystub replacement'],
-      workerNotes: ['Applicant can provide replacement paystub by email for the prototype scenario.'],
+      scheduledAt: '2026-05-27 01:30 PM',
+      missingFields: ['Confirm Sarah Motorist fluctuating part-time income', 'Review National Grid bill for utility expense handling'],
+      workerNotes: [
+        'Michael confirmed SNAP application request.',
+        'Sarah part-time retail income varies by schedule and should be reviewed before budget.',
+      ],
       applicantContactStatus: 'Reached',
       applicantResponseStatus: 'Waiting for Response',
       mockEmailState: 'Drafted',
     },
-    documents: standardDocuments('MYB-1004', 'Devon Brooks', 42),
-    clearance: defaultClearance('MYB-1004', 'Devon Brooks'),
-    validations: defaultValidations('MYB-1004'),
+    documents: motoristDocuments('MYB-1004'),
+    clearance: motoristClearance('MYB-1004'),
+    validations: motoristValidations(),
     budget: {
       readiness: [
         { label: 'Application complete', status: 'Complete' },
-        { label: 'Income verified', status: 'Blocked' },
+        { label: 'Income verified', status: 'Needs Review' },
         { label: 'Expenses verified', status: 'Needs Review' },
-        { label: 'Clearance resolved', status: 'Complete' },
+        { label: 'Clearance resolved', status: 'Needs Review' },
       ],
-      incomeUsed: '$2,840/month pending readable paystub',
-      expensesUsed: '$1,550/month',
+      incomeUsed: 'Michael $1,000 weekly; Sarah $600 bi-weekly; projected gross $5,633/month',
+      expensesUsed: 'Rent $1,250/month; child care $250/month; National Grid $189.68',
       mockBenefitAmount: '$298/month',
-      status: 'Blocked by document review',
-      notes: ['Income cannot be accepted until replacement paystub is verified.'],
+      status: 'Needs worker review',
+      notes: [
+        'Paystub supports Michael warehouse wages for pay period 05/19/26-05/25/26.',
+        'Utility bill shows $189.68 due by Jun 6, 2026 and should be reviewed for utility expense handling.',
+      ],
     },
     notices: defaultNotices('MYB-1004'),
-    transaction: {
-      readiness: 'Blocked by document review',
-      submissionStatus: 'Not Submitted',
-      batchStatus: 'Not queued',
-      finalStatus: 'Open',
-      lastUpdated: '2026-05-25 03:40 PM',
-    },
     timeline: [
-      ...createTimeline('MYB-1004', 'Devon Brooks', 'Document Review'),
+      ...createTimeline('MYB-1004', 'Michael M. Motorist', 'Document Review'),
       {
         id: 'MYB-1004-event-3',
-        timestamp: '2026-05-25T13:08:00',
-        eventType: 'Missing Info Requested',
+        timestamp: '2026-05-27T13:08:00',
+        eventType: 'Document Review Started',
         actor: 'Priya Shah',
         role: 'Document Reviewer',
         statusBefore: 'Document Review',
         statusAfter: 'Document Review',
-        notes: 'Paystub marked for OCR review due to low confidence.',
+        notes: 'Michael Motorist paystub and National Grid utility bill queued for worker verification.',
         duration: '8 min',
         relatedScreen: 'Documents',
         category: 'Document events',
@@ -932,13 +1132,6 @@ export const initialCases: BenefitCase[] = [
       notes: ['Budget can be calculated after possible match decision.'],
     },
     notices: defaultNotices('MYB-1005'),
-    transaction: {
-      readiness: 'Blocked by clearance review',
-      submissionStatus: 'Not Submitted',
-      batchStatus: 'Not queued',
-      finalStatus: 'Open',
-      lastUpdated: '2026-05-25 12:12 PM',
-    },
     timeline: [
       ...createTimeline('MYB-1005', 'Evelyn Park', 'Clearance Review'),
       {
@@ -956,4 +1149,642 @@ export const initialCases: BenefitCase[] = [
       },
     ],
   },
+];
+
+interface AdditionalCaseSeed {
+  mybNumber: string;
+  applicantName: string;
+  description: string;
+  county: string;
+  region: string;
+  filingDate: string;
+  eligibilityDueDate: string;
+  status: CaseStatus;
+  currentStage: string;
+  assignedGroup: string;
+  assignedWorker: string;
+  priority: Priority;
+  exception: ExceptionType;
+  expedited: boolean;
+  program: string;
+  householdSize: number;
+  incomeSource: string;
+  incomeAmount: string;
+  rentAmount: string;
+  blocker: string;
+}
+
+const additionalCaseSeeds: AdditionalCaseSeed[] = [
+  {
+    mybNumber: 'MYB-1006',
+    applicantName: 'Farah Khan',
+    description: 'Interview scheduled, income details pending',
+    county: 'Albany',
+    region: 'Capital',
+    filingDate: '2026-05-14',
+    eligibilityDueDate: '2026-06-12',
+    status: 'Pending Review',
+    currentStage: 'Interview Scheduling',
+    assignedGroup: 'Eligibility Review',
+    assignedWorker: 'Avery Johnson',
+    priority: 'Medium',
+    exception: 'None',
+    expedited: false,
+    program: 'SNAP',
+    householdSize: 3,
+    incomeSource: 'Home care wages',
+    incomeAmount: '$1,680.00',
+    rentAmount: '$1,210.00',
+    blocker: 'Interview confirmation is pending.',
+  },
+  {
+    mybNumber: 'MYB-1007',
+    applicantName: 'Jonah Ellis',
+    description: 'Utility expense proof missing',
+    county: 'Erie',
+    region: 'Western',
+    filingDate: '2026-05-12',
+    eligibilityDueDate: '2026-06-10',
+    status: 'Missing Information',
+    currentStage: 'Information Request',
+    assignedGroup: 'Eligibility Review',
+    assignedWorker: 'Noah Chen',
+    priority: 'Normal',
+    exception: 'Missing Info',
+    expedited: false,
+    program: 'SNAP',
+    householdSize: 2,
+    incomeSource: 'Restaurant wages',
+    incomeAmount: '$1,240.00',
+    rentAmount: '$875.00',
+    blocker: 'Utility statement is missing.',
+  },
+  {
+    mybNumber: 'MYB-1008',
+    applicantName: 'Lena Ortiz',
+    description: 'Supervisor review requested for denial reason',
+    county: 'Queens',
+    region: 'NYC',
+    filingDate: '2026-05-08',
+    eligibilityDueDate: '2026-06-06',
+    status: 'Pending Review',
+    currentStage: 'Supervisor Review',
+    assignedGroup: 'Supervisor Queue',
+    assignedWorker: 'Maya Rivera',
+    priority: 'High',
+    exception: 'Supervisor Review',
+    expedited: false,
+    program: 'SNAP',
+    householdSize: 1,
+    incomeSource: 'Freelance income',
+    incomeAmount: '$2,100.00',
+    rentAmount: '$1,500.00',
+    blocker: 'Supervisor needs to review the proposed reason code.',
+  },
+  {
+    mybNumber: 'MYB-1009',
+    applicantName: 'Marcus Green',
+    description: 'Approved case waiting on final review',
+    county: 'Monroe',
+    region: 'Finger Lakes',
+    filingDate: '2026-05-04',
+    eligibilityDueDate: '2026-06-02',
+    status: 'Approved',
+    currentStage: 'Final Review',
+    assignedGroup: 'Budget Unit',
+    assignedWorker: 'Priya Shah',
+    priority: 'Normal',
+    exception: 'None',
+    expedited: false,
+    program: 'SNAP',
+    householdSize: 4,
+    incomeSource: 'Manufacturing wages',
+    incomeAmount: '$2,350.00',
+    rentAmount: '$1,325.00',
+    blocker: 'Final review confirmation is pending.',
+  },
+  {
+    mybNumber: 'MYB-1010',
+    applicantName: 'Nora Bennett',
+    description: 'Clearance returned multiple possible matches',
+    county: 'Hamilton',
+    region: 'North Country',
+    filingDate: '2026-05-22',
+    eligibilityDueDate: '2026-06-05',
+    status: 'Clearance Review',
+    currentStage: 'Multiple Match Review',
+    assignedGroup: 'Clearance Unit',
+    assignedWorker: 'Jordan Lee',
+    priority: 'High',
+    exception: 'Clearance Match',
+    expedited: false,
+    program: 'SNAP',
+    householdSize: 2,
+    incomeSource: 'Child support',
+    incomeAmount: '$540.00',
+    rentAmount: '$710.00',
+    blocker: 'Multiple identity candidates require decision.',
+  },
+  {
+    mybNumber: 'MYB-1011',
+    applicantName: 'Owen Patel',
+    description: 'Expedited application with same-week due date',
+    county: 'Albany',
+    region: 'Capital',
+    filingDate: '2026-05-25',
+    eligibilityDueDate: '2026-05-28',
+    status: 'Pending Review',
+    currentStage: 'Expedited Screening',
+    assignedGroup: 'Eligibility Review',
+    assignedWorker: 'Avery Johnson',
+    priority: 'Critical',
+    exception: 'Due Soon',
+    expedited: true,
+    program: 'SNAP Expedited',
+    householdSize: 1,
+    incomeSource: 'No current income',
+    incomeAmount: '$0.00',
+    rentAmount: '$650.00',
+    blocker: 'Expedited eligibility screen must be completed this week.',
+  },
+  {
+    mybNumber: 'MYB-1012',
+    applicantName: 'Paige Simmons',
+    description: 'Replacement lease proof received',
+    county: 'Erie',
+    region: 'Western',
+    filingDate: '2026-05-11',
+    eligibilityDueDate: '2026-06-09',
+    status: 'Document Review',
+    currentStage: 'Housing Document Review',
+    assignedGroup: 'Document Review',
+    assignedWorker: 'Priya Shah',
+    priority: 'Medium',
+    exception: 'OCR Review',
+    expedited: false,
+    program: 'SNAP',
+    householdSize: 5,
+    incomeSource: 'Retail wages',
+    incomeAmount: '$2,020.00',
+    rentAmount: '$1,440.00',
+    blocker: 'Replacement lease requires verification.',
+  },
+  {
+    mybNumber: 'MYB-1013',
+    applicantName: 'Quinn Foster',
+    description: 'Ready for budget after validations completed',
+    county: 'Queens',
+    region: 'NYC',
+    filingDate: '2026-05-02',
+    eligibilityDueDate: '2026-05-31',
+    status: 'Ready for Budget',
+    currentStage: 'Budget Preparation',
+    assignedGroup: 'Budget Unit',
+    assignedWorker: 'Maya Rivera',
+    priority: 'Normal',
+    exception: 'None',
+    expedited: false,
+    program: 'SNAP',
+    householdSize: 2,
+    incomeSource: 'Office wages',
+    incomeAmount: '$1,890.00',
+    rentAmount: '$1,680.00',
+    blocker: 'Budget review has not started.',
+  },
+  {
+    mybNumber: 'MYB-1014',
+    applicantName: 'Riley Moore',
+    description: 'Denied case pending notice preview',
+    county: 'Monroe',
+    region: 'Finger Lakes',
+    filingDate: '2026-04-30',
+    eligibilityDueDate: '2026-05-29',
+    status: 'Denied',
+    currentStage: 'Notice Preparation',
+    assignedGroup: 'Eligibility Review',
+    assignedWorker: 'Noah Chen',
+    priority: 'Normal',
+    exception: 'Supervisor Review',
+    expedited: false,
+    program: 'SNAP',
+    householdSize: 1,
+    incomeSource: 'Full-time wages',
+    incomeAmount: '$3,400.00',
+    rentAmount: '$1,100.00',
+    blocker: 'Denial notice text needs supervisor review.',
+  },
+  {
+    mybNumber: 'MYB-1015',
+    applicantName: 'Sasha Coleman',
+    description: 'Applicant withdrew before interview',
+    county: 'Hamilton',
+    region: 'North Country',
+    filingDate: '2026-05-01',
+    eligibilityDueDate: '2026-05-30',
+    status: 'Withdrawn',
+    currentStage: 'Closure Review',
+    assignedGroup: 'Operations',
+    assignedWorker: 'Jordan Lee',
+    priority: 'Normal',
+    exception: 'None',
+    expedited: false,
+    program: 'SNAP',
+    householdSize: 1,
+    incomeSource: 'Part-time wages',
+    incomeAmount: '$860.00',
+    rentAmount: '$590.00',
+    blocker: 'Closure reason should be confirmed.',
+  },
+  {
+    mybNumber: 'MYB-1016',
+    applicantName: 'Theo Wallace',
+    description: 'Birth certificate replacement requested',
+    county: 'Albany',
+    region: 'Capital',
+    filingDate: '2026-05-20',
+    eligibilityDueDate: '2026-06-18',
+    status: 'Document Review',
+    currentStage: 'Citizenship Document Review',
+    assignedGroup: 'Document Review',
+    assignedWorker: 'Priya Shah',
+    priority: 'Medium',
+    exception: 'OCR Review',
+    expedited: false,
+    program: 'SNAP',
+    householdSize: 3,
+    incomeSource: 'Warehouse wages',
+    incomeAmount: '$1,940.00',
+    rentAmount: '$1,020.00',
+    blocker: 'Birth certificate image is partially cut off.',
+  },
+  {
+    mybNumber: 'MYB-1017',
+    applicantName: 'Uma Price',
+    description: 'Due soon with open interview follow-up',
+    county: 'Erie',
+    region: 'Western',
+    filingDate: '2026-05-05',
+    eligibilityDueDate: '2026-05-27',
+    status: 'Missing Information',
+    currentStage: 'Follow-Up',
+    assignedGroup: 'Eligibility Review',
+    assignedWorker: 'Avery Johnson',
+    priority: 'High',
+    exception: 'Due Soon',
+    expedited: false,
+    program: 'SNAP',
+    householdSize: 2,
+    incomeSource: 'UIB',
+    incomeAmount: '$780.00',
+    rentAmount: '$825.00',
+    blocker: 'Follow-up response is due before the eligibility date.',
+  },
+  {
+    mybNumber: 'MYB-1018',
+    applicantName: 'Victor Nguyen',
+    description: 'Tax validation discrepancy needs review',
+    county: 'Queens',
+    region: 'NYC',
+    filingDate: '2026-05-16',
+    eligibilityDueDate: '2026-06-14',
+    status: 'Pending Review',
+    currentStage: 'External Validation',
+    assignedGroup: 'Eligibility Review',
+    assignedWorker: 'Maya Rivera',
+    priority: 'Medium',
+    exception: 'None',
+    expedited: false,
+    program: 'SNAP',
+    householdSize: 4,
+    incomeSource: 'Rideshare income',
+    incomeAmount: '$2,260.00',
+    rentAmount: '$1,850.00',
+    blocker: 'Tax validation discrepancy needs worker review.',
+  },
+  {
+    mybNumber: 'MYB-1019',
+    applicantName: 'Willow Hart',
+    description: 'Medical deduction review requested',
+    county: 'Monroe',
+    region: 'Finger Lakes',
+    filingDate: '2026-05-09',
+    eligibilityDueDate: '2026-06-07',
+    status: 'Ready for Budget',
+    currentStage: 'Budget Review',
+    assignedGroup: 'Budget Unit',
+    assignedWorker: 'Noah Chen',
+    priority: 'Medium',
+    exception: 'Supervisor Review',
+    expedited: false,
+    program: 'SNAP',
+    householdSize: 1,
+    incomeSource: 'Retirement income',
+    incomeAmount: '$1,320.00',
+    rentAmount: '$940.00',
+    blocker: 'Medical deduction needs final review.',
+  },
+  {
+    mybNumber: 'MYB-1020',
+    applicantName: 'Xavier Brooks',
+    description: 'Identity match accepted, validations pending',
+    county: 'Hamilton',
+    region: 'North Country',
+    filingDate: '2026-05-23',
+    eligibilityDueDate: '2026-06-21',
+    status: 'Pending Review',
+    currentStage: 'Validation Queue',
+    assignedGroup: 'Eligibility Review',
+    assignedWorker: 'Jordan Lee',
+    priority: 'Normal',
+    exception: 'None',
+    expedited: false,
+    program: 'SNAP',
+    householdSize: 2,
+    incomeSource: 'Seasonal work',
+    incomeAmount: '$1,100.00',
+    rentAmount: '$775.00',
+    blocker: 'External validations have not started.',
+  },
+  {
+    mybNumber: 'MYB-1021',
+    applicantName: 'Yara Stone',
+    description: 'Expedited candidate missing rent proof',
+    county: 'Albany',
+    region: 'Capital',
+    filingDate: '2026-05-26',
+    eligibilityDueDate: '2026-05-29',
+    status: 'Missing Information',
+    currentStage: 'Expedited Missing Info',
+    assignedGroup: 'Eligibility Review',
+    assignedWorker: 'Avery Johnson',
+    priority: 'Critical',
+    exception: 'Missing Info',
+    expedited: true,
+    program: 'SNAP Expedited',
+    householdSize: 3,
+    incomeSource: 'No current income',
+    incomeAmount: '$0.00',
+    rentAmount: '$1,050.00',
+    blocker: 'Rent proof is missing for expedited review.',
+  },
+  {
+    mybNumber: 'MYB-1022',
+    applicantName: 'Zane Kim',
+    description: 'Paystub replacement uploaded overnight',
+    county: 'Erie',
+    region: 'Western',
+    filingDate: '2026-05-17',
+    eligibilityDueDate: '2026-06-15',
+    status: 'Document Review',
+    currentStage: 'Replacement Review',
+    assignedGroup: 'Document Review',
+    assignedWorker: 'Priya Shah',
+    priority: 'High',
+    exception: 'OCR Review',
+    expedited: false,
+    program: 'SNAP',
+    householdSize: 2,
+    incomeSource: 'Grocery wages',
+    incomeAmount: '$1,540.00',
+    rentAmount: '$995.00',
+    blocker: 'Replacement paystub is waiting for verification.',
+  },
+  {
+    mybNumber: 'MYB-1023',
+    applicantName: 'Amara Wilson',
+    description: 'Household member no match found',
+    county: 'Queens',
+    region: 'NYC',
+    filingDate: '2026-05-13',
+    eligibilityDueDate: '2026-06-11',
+    status: 'Clearance Review',
+    currentStage: 'New Identifier Review',
+    assignedGroup: 'Clearance Unit',
+    assignedWorker: 'Jordan Lee',
+    priority: 'Medium',
+    exception: 'Clearance Match',
+    expedited: false,
+    program: 'SNAP',
+    householdSize: 5,
+    incomeSource: 'School aide wages',
+    incomeAmount: '$1,760.00',
+    rentAmount: '$1,900.00',
+    blocker: 'Household member may need a new CIN / SIN.',
+  },
+  {
+    mybNumber: 'MYB-1024',
+    applicantName: 'Caleb Ross',
+    description: 'Approved case awaiting final review',
+    county: 'Monroe',
+    region: 'Finger Lakes',
+    filingDate: '2026-04-28',
+    eligibilityDueDate: '2026-05-27',
+    status: 'Approved',
+    currentStage: 'Final Review',
+    assignedGroup: 'Operations',
+    assignedWorker: 'Maya Rivera',
+    priority: 'Normal',
+    exception: 'None',
+    expedited: false,
+    program: 'SNAP',
+    householdSize: 2,
+    incomeSource: 'Pension',
+    incomeAmount: '$1,190.00',
+    rentAmount: '$720.00',
+    blocker: 'Final closeout review is pending.',
+  },
+  {
+    mybNumber: 'MYB-1025',
+    applicantName: 'Daphne Young',
+    description: 'Clean application entering budget queue',
+    county: 'Hamilton',
+    region: 'North Country',
+    filingDate: '2026-05-19',
+    eligibilityDueDate: '2026-06-17',
+    status: 'Ready for Budget',
+    currentStage: 'Budget Queue',
+    assignedGroup: 'Budget Unit',
+    assignedWorker: 'Noah Chen',
+    priority: 'Normal',
+    exception: 'None',
+    expedited: false,
+    program: 'SNAP',
+    householdSize: 3,
+    incomeSource: 'Bakery wages',
+    incomeAmount: '$1,620.00',
+    rentAmount: '$980.00',
+    blocker: 'Awaiting budget worker pickup.',
+  },
+];
+
+function checklistForSeed(seed: AdditionalCaseSeed): Array<{ label: string; status: ChecklistStatus }> {
+  return baseChecklist.map((item) => {
+    if (seed.status === 'Approved' || seed.status === 'Denied' || seed.status === 'Withdrawn') {
+      return { ...item, status: 'Complete' };
+    }
+
+    if (item.label === 'Application reviewed') {
+      return { ...item, status: seed.status === 'Missing Information' ? 'Blocked' : 'Complete' };
+    }
+
+    if (item.label === 'Interview complete') {
+      return { ...item, status: seed.currentStage.includes('Interview') || seed.status === 'Missing Information' ? 'Needs Review' : 'Complete' };
+    }
+
+    if (item.label === 'Documents reviewed') {
+      return { ...item, status: seed.status === 'Document Review' ? 'Blocked' : seed.status === 'Pending Review' ? 'Needs Review' : 'Complete' };
+    }
+
+    if (item.label === 'Clearance reviewed') {
+      return { ...item, status: seed.status === 'Clearance Review' ? 'Blocked' : seed.status === 'Ready for Budget' ? 'Complete' : 'Needs Review' };
+    }
+
+    if (item.label === 'External validations reviewed') {
+      return { ...item, status: seed.currentStage.includes('Validation') ? 'Needs Review' : seed.status === 'Ready for Budget' ? 'Complete' : 'Not Started' };
+    }
+
+    if (item.label === 'Budget reviewed') {
+      return { ...item, status: seed.status === 'Ready for Budget' ? 'Needs Review' : 'Not Started' };
+    }
+
+    return item;
+  });
+}
+
+function interviewForSeed(seed: AdditionalCaseSeed): BenefitCase['interview'] {
+  const missingFields = seed.exception === 'Missing Info'
+    ? ['Verification detail requested', seed.blocker]
+    : seed.status === 'Document Review'
+      ? ['Document replacement follow-up']
+      : [];
+
+  return {
+    status: seed.currentStage.includes('Interview') ? 'Scheduled' : missingFields.length ? 'Follow-up Needed' : 'Complete',
+    method: seed.currentStage.includes('Interview') ? 'Phone' : 'Phone',
+    scheduledAt: seed.currentStage.includes('Interview') ? '2026-05-27 02:00 PM' : 'Completed or not required',
+    missingFields,
+    workerNotes: [seed.blocker],
+    applicantContactStatus: missingFields.length ? 'Waiting on applicant' : 'Reached',
+    applicantResponseStatus: missingFields.length ? 'Waiting for Response' : 'Response Received',
+    mockEmailState: missingFields.length ? 'Waiting for Response' : 'Response Received',
+  };
+}
+
+function documentsForSeed(seed: AdditionalCaseSeed): DocumentRecord[] {
+  const confidence = seed.status === 'Document Review' || seed.exception === 'OCR Review' ? 55 : 87;
+  const documents = standardDocuments(seed.mybNumber, seed.applicantName, confidence);
+
+  if (seed.status === 'Document Review') {
+    return documents.map((document) => document.name === 'Paystub'
+      ? { ...document, status: 'Needs Review', notes: [...document.notes, seed.blocker] }
+      : document);
+  }
+
+  return documents;
+}
+
+function budgetReadinessForSeed(seed: AdditionalCaseSeed): Array<{ label: string; status: ChecklistStatus }> {
+  return [
+    { label: 'Application complete', status: seed.status === 'Missing Information' ? 'Blocked' : 'Complete' },
+    { label: 'Income verified', status: seed.status === 'Document Review' ? 'Blocked' : seed.status === 'Ready for Budget' || seed.status === 'Approved' ? 'Complete' : 'Needs Review' },
+    { label: 'Expenses verified', status: seed.exception === 'Missing Info' ? 'Needs Review' : 'Complete' },
+    { label: 'Clearance resolved', status: seed.status === 'Clearance Review' ? 'Blocked' : 'Complete' },
+  ];
+}
+
+function createAdditionalCase(seed: AdditionalCaseSeed, index: number): BenefitCase {
+  const caseId = seed.mybNumber;
+  const household: HouseholdMember[] = [
+    {
+      name: seed.applicantName,
+      relationship: 'Self',
+      age: 24 + (index % 39),
+      applying: true,
+      identifierStatus: seed.status === 'Clearance Review' ? 'Possible match' : `Matched CIN-${620000 + index}`,
+    },
+  ];
+
+  if (seed.householdSize > 1) {
+    household.push({
+      name: `${seed.applicantName.split(' ')[0]} household member`,
+      relationship: seed.householdSize > 3 ? 'Child' : 'Spouse',
+      age: seed.householdSize > 3 ? 9 + (index % 7) : 31 + (index % 15),
+      applying: true,
+      identifierStatus: seed.status === 'Clearance Review' ? 'No match / assign new identifier' : `Matched SIN-${730000 + index}`,
+    });
+  }
+
+  return {
+    id: `case-${seed.mybNumber.replace('MYB-', '')}`,
+    mybNumber: seed.mybNumber,
+    applicantName: seed.applicantName,
+    description: seed.description,
+    county: seed.county,
+    region: seed.region,
+    filingDate: seed.filingDate,
+    eligibilityDueDate: seed.eligibilityDueDate,
+    status: seed.status,
+    currentStage: seed.currentStage,
+    assignedGroup: seed.assignedGroup,
+    assignedWorker: seed.assignedWorker,
+    priority: seed.priority,
+    exception: seed.exception,
+    expedited: seed.expedited,
+    program: seed.program,
+    currentBlockers: seed.blocker ? [seed.blocker] : [],
+    applicant: {
+      email: `${seed.applicantName.toLowerCase().replace(/\s+/g, '.')}@example.test`,
+      phone: `(555) 01${String(index + 26).padStart(2, '0')}`,
+      address: `${100 + index} Main Street, ${seed.county}, NY`,
+      preferredLanguage: index % 5 === 0 ? 'Spanish' : 'English',
+      contactPreference: index % 3 === 0 ? 'Phone' : 'Email',
+    },
+    household,
+    income: [
+      {
+        source: seed.incomeSource,
+        person: seed.applicantName,
+        frequency: seed.incomeAmount === '$0.00' ? 'Monthly' : index % 2 === 0 ? 'Biweekly' : 'Monthly',
+        grossAmount: seed.incomeAmount,
+        verified: !['Document Review', 'Missing Information'].includes(seed.status),
+      },
+    ],
+    expenses: [
+      { type: 'Rent', amount: seed.rentAmount, frequency: 'Monthly', verified: seed.exception !== 'Missing Info' },
+      { type: 'Utilities', amount: `$${145 + (index * 9)}.00`, frequency: 'Monthly', verified: index % 4 !== 0 },
+    ],
+    checklist: checklistForSeed(seed),
+    application: {
+      signatureStatus: seed.exception === 'Missing Info' ? 'Needs worker confirmation' : 'Signed electronically',
+      responses: [
+        { label: 'Household size', value: `${seed.householdSize} household member${seed.householdSize === 1 ? '' : 's'} reported.` },
+        { label: 'Employment', value: `${seed.incomeSource} reported as current income source.` },
+        { label: 'Shelter expense', value: `${seed.rentAmount} rent reported.` },
+      ],
+      submittedDocumentsSummary: 'Application, identity, income, and housing documents are represented with mock records.',
+    },
+    interview: interviewForSeed(seed),
+    documents: documentsForSeed(seed),
+    clearance: defaultClearance(caseId, seed.applicantName).map((scenario) => seed.status === 'Clearance Review' && scenario.title === 'Possible match'
+      ? { ...scenario, matchScore: 78, status: 'Open' }
+      : scenario),
+    validations: defaultValidations(caseId).map((validation) => seed.currentStage.includes('Validation')
+      ? { ...validation, status: validation.name === 'Data Discrepancy Summary' ? 'Worker Review Required' : 'Discrepancy Found' }
+      : validation),
+    budget: {
+      readiness: budgetReadinessForSeed(seed),
+      incomeUsed: `${seed.incomeAmount}/month mock input`,
+      expensesUsed: `${seed.rentAmount}/month rent plus utilities`,
+      mockBenefitAmount: `$${210 + (index * 13)}/month`,
+      status: seed.status === 'Ready for Budget' ? 'Ready for worker review' : `Blocked by ${seed.currentStage}`,
+      notes: [seed.blocker],
+    },
+    notices: defaultNotices(caseId),
+    timeline: createTimeline(caseId, seed.applicantName, seed.status),
+  };
+}
+
+export const initialCases: BenefitCase[] = [
+  ...primaryCases,
+  ...additionalCaseSeeds.map(createAdditionalCase),
 ];
