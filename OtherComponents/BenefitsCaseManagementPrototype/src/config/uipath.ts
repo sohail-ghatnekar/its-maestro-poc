@@ -24,6 +24,7 @@ export const UIPATH_SCOPES = [
   'DataFabric.Schema.Read',
   'DataFabric.Data.Read',
   'DataFabric.Data.Write',
+  'OR.Administration.Read',
   'OR.Folders.Read',
 ].join(' ');
 

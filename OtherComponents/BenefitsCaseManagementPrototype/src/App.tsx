@@ -54,7 +54,6 @@ import type {
   Role,
   TimelineEvent,
   UiPathDocumentReference,
-  ValidationStatus,
 } from './mockData';
 import {
   demoCoachTips,
@@ -130,6 +129,7 @@ interface ResolvedDocumentSource {
   url: string;
   mimeType: string;
   sourceLabel: string;
+  sourceMode?: BucketDocumentSourceMode;
   localSourcePath?: string;
   uiPathDocumentRef?: UiPathDocumentReference;
 }
@@ -157,6 +157,106 @@ const emptyFilters: Filters = {
   expedited: false,
   assignedGroup: 'all',
 };
+
+const demoOperationsMetrics = {
+  averageCaseAge: '18 days',
+  dueSoon: 11,
+  missingInfo: 16,
+  needingDocuments: 14,
+  clearanceReview: 9,
+  supervisorReview: 5,
+};
+
+const demoOperationsGroupedMetrics = {
+  byCounty: [
+    { label: 'Albany', value: 14 },
+    { label: 'Erie', value: 17 },
+    { label: 'Hamilton', value: 6 },
+    { label: 'Monroe', value: 19 },
+    { label: 'Queens', value: 23 },
+  ],
+  byRegion: [
+    { label: 'Capital', value: 14 },
+    { label: 'Finger Lakes', value: 19 },
+    { label: 'North Country', value: 6 },
+    { label: 'NYC', value: 23 },
+    { label: 'Western', value: 17 },
+  ],
+  byStatus: [
+    { label: 'Pending Review', value: 18 },
+    { label: 'Missing Information', value: 16 },
+    { label: 'Document Review', value: 14 },
+    { label: 'Clearance Review', value: 9 },
+    { label: 'Ready for Budget', value: 12 },
+    { label: 'Approved', value: 10 },
+  ],
+  byGroup: [
+    { label: 'Eligibility Review', value: 21 },
+    { label: 'Document Review', value: 14 },
+    { label: 'Clearance Unit', value: 9 },
+    { label: 'Budget Unit', value: 12 },
+    { label: 'Supervisor Queue', value: 5 },
+    { label: 'Operations', value: 3 },
+  ],
+};
+
+const demoOperationsBottlenecks = [
+  {
+    county: 'Albany',
+    region: 'Capital',
+    openCases: 14,
+    dueSoon: 2,
+    missingInfo: 3,
+    documentReview: 4,
+    clearanceReview: 1,
+    averageAge: 16,
+    primaryBottleneck: 'Document Review',
+  },
+  {
+    county: 'Erie',
+    region: 'Western',
+    openCases: 17,
+    dueSoon: 4,
+    missingInfo: 5,
+    documentReview: 2,
+    clearanceReview: 3,
+    averageAge: 22,
+    primaryBottleneck: 'Missing Info',
+  },
+  {
+    county: 'Hamilton',
+    region: 'North Country',
+    openCases: 6,
+    dueSoon: 1,
+    missingInfo: 1,
+    documentReview: 1,
+    clearanceReview: 0,
+    averageAge: 11,
+    primaryBottleneck: 'Balanced',
+  },
+  {
+    county: 'Monroe',
+    region: 'Finger Lakes',
+    openCases: 19,
+    dueSoon: 3,
+    missingInfo: 4,
+    documentReview: 5,
+    clearanceReview: 2,
+    averageAge: 19,
+    primaryBottleneck: 'Document Review',
+  },
+  {
+    county: 'Queens',
+    region: 'NYC',
+    openCases: 23,
+    dueSoon: 1,
+    missingInfo: 3,
+    documentReview: 2,
+    clearanceReview: 6,
+    averageAge: 24,
+    primaryBottleneck: 'Clearance Review',
+  },
+];
 
 const detailTabs: DetailTab[] = [
   'Summary',
@@ -243,14 +343,6 @@ function getErrorMessage(error: unknown): string {
   return 'UiPath request failed.';
 }
 
-const reasonCodeOptions = [
-  'Approval notice',
-  'Missing information notice',
-  'Denial notice',
-  'Q21 dynamic text example',
-  'Q22 dynamic text example',
-];
-
 function inferMimeType(url: string) {
   const normalizedUrl = url.toLowerCase();
 
@@ -296,11 +388,30 @@ function getBucketSourceLabel(_sourceMode: BucketDocumentSourceMode): string {
   return 'Orchestrator storage bucket';
 }
 
+function getBucketSourceTag(sourceMode?: BucketDocumentSourceMode): { label: string; className: string } | null {
+  if (sourceMode === 'orchestrator-get-read-uri') {
+    return {
+      label: 'Storage bucket',
+      className: 'bg-blue-50 text-blue-800 border-blue-200',
+    };
+  }
+
+  if (sourceMode === 'static-blob-fallback') {
+    return {
+      label: 'Blob',
+      className: 'bg-amber-50 text-amber-800 border-amber-200',
+    };
+  }
+
+  return null;
+}
+
 function buildApplicationPdfBucketSource(source: { url: string; sourceMode: BucketDocumentSourceMode }): ResolvedDocumentSource {
   return {
     url: source.url,
     mimeType: 'application/pdf',
     sourceLabel: getBucketSourceLabel(source.sourceMode),
+    sourceMode: source.sourceMode,
     uiPathDocumentRef: applicationPdfDocumentRef,
   };
 }
@@ -322,6 +433,7 @@ function buildEvidenceBucketSource(
     url: source.url,
     mimeType: bucketDocument.mimeType,
     sourceLabel: getBucketSourceLabel(source.sourceMode),
+    sourceMode: source.sourceMode,
     uiPathDocumentRef: getBucketDocumentRef(
       IES_WORKFLOW_CONFIG.documentEvidenceBucket.bucketId,
       bucketDocument.fileName,
@@ -368,7 +480,18 @@ const liveCaseFieldKeys = {
   supervisorReviewRequired: ['SupervisorReviewRequired', 'supervisorReviewRequired'],
   householdSize: ['HouseholdSize', 'householdSize'],
   grossMonthlyIncome: ['GrossMonthlyIncome', 'grossMonthlyIncome'],
-  benefitAmount: ['BenefitAmount', 'benefitAmount'],
+  benefitAmount: [
+    'BenefitAmount',
+    'benefitAmount',
+    'CalculatedBenefitAmount',
+    'calculatedBenefitAmount',
+    'CalculatedAmount',
+    'calculatedAmount',
+    'BudgetAmount',
+    'budgetAmount',
+    'MonthlyBenefitAmount',
+    'monthlyBenefitAmount',
+  ],
   noticeStatus: ['NoticeStatus', 'noticeStatus'],
   lastAuditEvent: ['LastAuditEvent', 'lastAuditEvent'],
   rawCaseJson: ['RawCaseJSON', 'RawCaseJson', 'rawCaseJSON'],
@@ -512,8 +635,15 @@ function readRecordNumber(record: LiveCaseRecord, keys: readonly string[]): numb
   }
 
   if (typeof value === 'string' && value.trim()) {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
+    const normalizedValue = value.trim().replace(/[$,]/g, '');
+    const parsed = Number(normalizedValue);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+
+    const numericText = normalizedValue.match(/-?\d+(\.\d+)?/)?.[0];
+    const parsedFromText = numericText ? Number(numericText) : Number.NaN;
+    return Number.isFinite(parsedFromText) ? parsedFromText : null;
   }
 
   return null;
@@ -1097,10 +1227,10 @@ function mapLiveRecordToCase(record: LiveCaseRecord): BenefitCase {
     expenses: [],
     budget: {
       ...template.budget,
-      incomeUsed: grossMonthlyIncome ? asCurrency(grossMonthlyIncome) : 'Not updated in Data Fabric',
-      expensesUsed: 'Not updated in Data Fabric',
-      mockBenefitAmount: benefitAmount ? `${asCurrency(benefitAmount)}/month` : 'Not updated in Data Fabric',
-      status: benefitAmount ? 'Calculation successful' : 'Processing',
+      incomeUsed: grossMonthlyIncome !== null ? asCurrency(grossMonthlyIncome) : '',
+      expensesUsed: '',
+      mockBenefitAmount: benefitAmount !== null ? `${asCurrency(benefitAmount)}/month` : '',
+      status: benefitAmount !== null ? 'Calculation successful' : 'Awaiting budget calculation',
     },
     application: {
       ...template.application,
@@ -1538,6 +1668,104 @@ function mergeVisibleLiveTasks(currentTasks: LiveTaskSummary[], refreshedTasks: 
   return [...refreshedTasks, ...stillVisibleCurrentTasks];
 }
 
+const budgetCalculationTaskTerms = [
+  'create budget',
+  'review budget results',
+  'budget review',
+  'eligibility calculation',
+  'benefit amount',
+];
+
+function normalizeRuntimeText(value: string): string {
+  return value
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function stringifyHistoryAttributes(value: unknown): string {
+  if (!value) {
+    return '';
+  }
+
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return '';
+  }
+}
+
+function getHistorySearchText(historyItem: LiveMaestroContext['executionHistory'][number]): string {
+  const rawHistory = historyItem as unknown as Record<string, unknown>;
+  return normalizeRuntimeText([
+    historyItem.name,
+    historyItem.id,
+    historyItem.traceId,
+    rawHistory.elementId,
+    rawHistory.bpmnElementId,
+    rawHistory.flowNodeId,
+    rawHistory.activityId,
+    rawHistory.elementExtensionType,
+    stringifyHistoryAttributes(rawHistory.attributes),
+  ].filter((value): value is string => typeof value === 'string' && Boolean(value.trim())).join(' '));
+}
+
+function isCompletedHistoryItem(historyItem: LiveMaestroContext['executionHistory'][number]): boolean {
+  const rawHistory = historyItem as unknown as Record<string, unknown>;
+  const statusText = normalizeRuntimeText([
+    rawHistory.status,
+    rawHistory.state,
+    rawHistory.executionStatus,
+    rawHistory.activityStatus,
+    rawHistory.result,
+    rawHistory.outcome,
+  ].filter((value): value is string => typeof value === 'string' && Boolean(value.trim())).join(' '));
+
+  return Boolean(historyItem.endTime)
+    || ['completed', 'complete', 'success', 'succeeded', 'done'].some((term) => statusText.includes(term));
+}
+
+function hasCompletedBudgetCalculationTask(context: LiveMaestroContext | null): boolean {
+  if (!context) {
+    return false;
+  }
+
+  return context.executionHistory.some((historyItem) => {
+    if (!isCompletedHistoryItem(historyItem)) {
+      return false;
+    }
+
+    const searchText = getHistorySearchText(historyItem);
+    return budgetCalculationTaskTerms.some((term) => searchText.includes(term));
+  });
+}
+
+function hasDisplayBudgetValue(value: string): boolean {
+  return Boolean(value.trim()) && !value.toLowerCase().includes('not updated');
+}
+
+function shouldShowCalculatedBudgetAmount(
+  caseItem: BenefitCase,
+  isLiveCase: boolean,
+  context: LiveMaestroContext | null,
+): boolean {
+  if (!hasDisplayBudgetValue(caseItem.budget.mockBenefitAmount)) {
+    return false;
+  }
+
+  if (!isLiveCase) {
+    return true;
+  }
+
+  return hasCompletedBudgetCalculationTask(context) || caseItem.budget.status === 'Calculation successful';
+}
+
 function SectionCard({ title, children, actions }: { title: string; children: ReactNode; actions?: ReactNode }) {
   return (
     <section className="bg-white rounded-lg border border-gray-200 shadow-sm">
@@ -1662,6 +1890,7 @@ function DocumentPreview({
   showSourceDetails?: boolean;
 }) {
   const previewHeight = heightClass || (compact ? 'h-80 md:h-96' : 'h-[36rem]');
+  const sourceTag = source ? getBucketSourceTag(source.sourceMode) : null;
 
   if (!source) {
     return (
@@ -1677,6 +1906,12 @@ function DocumentPreview({
 
   return (
     <div className="space-y-3">
+      {sourceTag && (
+        <div className="flex justify-end">
+          <Pill label={sourceTag.label} className={sourceTag.className} />
+        </div>
+      )}
+
       <div className={`bg-gray-100 rounded-lg border border-gray-200 overflow-hidden ${previewHeight}`}>
         {source.mimeType === 'application/pdf' ? (
           <iframe title={title} src={source.url} className="h-full w-full bg-white" />
@@ -1980,7 +2215,6 @@ function App() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [modal, setModal] = useState<ModalState | null>(null);
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
-  const [reasonCodeDraft, setReasonCodeDraft] = useState(reasonCodeOptions[0]);
   const [activeTestScenarioId, setActiveTestScenarioId] = useState(mockTestScenarios[0].id);
   const [openCommandBoxId, setOpenCommandBoxId] = useState<string | null>(null);
   const [testCommands, setTestCommands] = useState<Record<string, string>>(defaultTestCommands);
@@ -2044,6 +2278,12 @@ function App() {
   const budgetCreated = selectedCase.budget.status === 'Budget created'
     || selectedCase.budget.status === 'Calculation successful'
     || selectedCase.budget.status === 'Ready for worker review';
+  const showBudgetIncomeUsed = hasDisplayBudgetValue(selectedCase.budget.incomeUsed);
+  const showCalculatedBudgetAmount = shouldShowCalculatedBudgetAmount(
+    selectedCase,
+    Boolean(matchedLiveRecord),
+    liveMaestroContext,
+  );
   const noticePreviewGenerated = selectedCase.notices.some((notice) => ['Preview Generated', 'Approved', 'Sent', 'Printed'].includes(notice.status));
   const currentHelpContext: HelpContextId = screen === 'detail'
     ? activeTab === 'Summary'
@@ -2386,60 +2626,9 @@ function App() {
     };
   }, [cases]);
 
-  const groupedMetrics = useMemo(() => {
-    const byCounty = countyOptions.map((county) => ({
-      label: county,
-      value: cases.filter((caseItem) => caseItem.county === county).length,
-    }));
-    const byRegion = regionOptions.map((region) => ({
-      label: region,
-      value: cases.filter((caseItem) => caseItem.region === region).length,
-    }));
-    const byStatus = statusOptions.map((status) => ({
-      label: status,
-      value: cases.filter((caseItem) => caseItem.status === status).length,
-    })).filter((item) => item.value > 0);
-    const byGroup = assignedGroups.map((group) => ({
-      label: group,
-      value: cases.filter((caseItem) => caseItem.assignedGroup === group).length,
-    })).filter((item) => item.value > 0);
-
-    return { byCounty, byRegion, byStatus, byGroup };
-  }, [cases]);
-
-  const bottlenecks = useMemo(() => {
-    return countyOptions.map((county) => {
-      const countyCases = cases.filter((caseItem) => caseItem.county === county);
-      const dueSoonCount = countyCases.filter(isDueSoon).length;
-      const missingInfoCount = countyCases.filter((caseItem) => caseItem.exception === 'Missing Info').length;
-      const documentReviewCount = countyCases.filter((caseItem) => caseItem.exception === 'OCR Review' || caseItem.status === 'Document Review').length;
-      const clearanceReviewCount = countyCases.filter((caseItem) => caseItem.exception === 'Clearance Match' || caseItem.status === 'Clearance Review').length;
-      const primaryBottleneck = [
-        { label: 'Missing Info', value: missingInfoCount },
-        { label: 'Document Review', value: documentReviewCount },
-        { label: 'Clearance Review', value: clearanceReviewCount },
-        { label: 'Due Soon', value: dueSoonCount },
-      ].sort((a, b) => b.value - a.value)[0];
-      const averageAge = countyCases.length
-        ? Math.round(countyCases.reduce((sum, caseItem) => {
-          const filed = new Date(`${caseItem.filingDate}T12:00:00`);
-          return sum + Math.max(0, Math.ceil((today.getTime() - filed.getTime()) / 86_400_000));
-        }, 0) / countyCases.length)
-        : 0;
-
-      return {
-        county,
-        region: countyCases[0]?.region || '-',
-        openCases: countyCases.length,
-        dueSoon: dueSoonCount,
-        missingInfo: missingInfoCount,
-        documentReview: documentReviewCount,
-        clearanceReview: clearanceReviewCount,
-        averageAge,
-        primaryBottleneck: primaryBottleneck.value > 0 ? primaryBottleneck.label : 'Balanced',
-      };
-    });
-  }, [cases]);
+  const operationsMetrics = demoOperationsMetrics;
+  const groupedMetrics = demoOperationsGroupedMetrics;
+  const bottlenecks = demoOperationsBottlenecks;
 
   const resetMockData = () => {
     setCases([]);
@@ -2461,12 +2650,6 @@ function App() {
     URL.revokeObjectURL(url);
     appendAuditEvent(caseItem.id, 'Export Audit JSON', 'Case JSON was downloaded locally.', 'Raw Case JSON', 'System actions');
     showToast('JSON download started locally.', 'success');
-  };
-
-  const copyJson = async (caseItem: BenefitCase) => {
-    await navigator.clipboard?.writeText(JSON.stringify(caseItem, null, 2));
-    appendAuditEvent(caseItem.id, 'Export Audit JSON', 'Case JSON was copied to clipboard.', 'Raw Case JSON', 'System actions');
-    showToast('JSON copied to clipboard.', 'success');
   };
 
   const copyText = (value: string, successMessage: string) => {
@@ -4097,20 +4280,6 @@ function App() {
     );
   };
 
-  const updateValidation = (name: string, status: ValidationStatus, summary: string, eventType: string) => {
-    if (!roleCanEdit(role, 'External Validation')) {
-      roleDisabledMessage();
-      return;
-    }
-
-    updateCase(selectedCase.id, (caseItem) => ({
-      ...caseItem,
-      validations: caseItem.validations.map((validation) => validation.name === name ? { ...validation, status, summary, lastRun: '2026-05-26 12:00 PM' } : validation),
-    }));
-    appendAuditEvent(selectedCase.id, eventType, summary, 'External Validation', 'System actions');
-    showToast('Validation state updated locally.', 'success');
-  };
-
   const ExternalValidationTab = () => {
     const validationTasks = getTasksForTab(liveTasks, 'External Validation');
     const hasPendingValidationTask = validationTasks.some((task) => !isLiveTaskCompleted(task));
@@ -4165,11 +4334,15 @@ function App() {
         <SectionCard title="Budget Readiness Checklist">
           <Checklist items={selectedCase.budget.readiness} />
         </SectionCard>
-        <SectionCard title="Inputs Used">
+        <SectionCard title="Budget Calculation">
           <dl className="space-y-4">
-            <Field label="Income Used" value={selectedCase.budget.incomeUsed} />
-            <Field label="Expenses Used" value={selectedCase.budget.expensesUsed} />
-            <Field label="Mock Calculated Benefit Amount" value={<span className="text-green-700 font-semibold">Mock benefit amount: {selectedCase.budget.mockBenefitAmount}</span>} />
+            {showBudgetIncomeUsed && <Field label="Income Used" value={selectedCase.budget.incomeUsed} />}
+            {showCalculatedBudgetAmount && (
+              <Field
+                label="Calculated Benefit Amount"
+                value={<span className="text-green-700 font-semibold">{selectedCase.budget.mockBenefitAmount}</span>}
+              />
+            )}
             <Field label="Budget Status" value={<Pill label={selectedCase.budget.status} />} />
           </dl>
         </SectionCard>
@@ -4183,7 +4356,7 @@ function App() {
       </div>
 
       <HelpBox>
-        Budget values are static mock values. The tab demonstrates readiness, calculation states, review notes, and error handling.
+        Budget values update from the live case record after Maestro reaches the budget calculation step.
       </HelpBox>
     </div>
   );
@@ -4291,6 +4464,13 @@ function App() {
     const selectDocumentReason = 'Select a document card first.';
     const documentEditDisabledReason = selectedDocument ? editDisabledReason('Documents') : selectDocumentReason;
     const canActOnDocument = Boolean(selectedDocument) && roleCanEdit(role, 'Documents');
+    const canCreateBudget = roleCanEdit(role, 'Budget') && !budgetCreated;
+    const canReviewBudget = roleCanEdit(role, 'Budget') && budgetCreated;
+    const viewAllActionsButton = (
+      <ActionButton onClick={() => setActiveTab('Actions')}>
+        View All Actions
+      </ActionButton>
+    );
 
     const actionsByTab: Record<DetailTab, ReactNode> = {
       Summary: (
@@ -4322,95 +4502,50 @@ function App() {
       ),
       Documents: (
         <>
-          <ActionButton disabled={!selectedDocument} disabledReason={selectDocumentReason} onClick={() => {
-            if (!selectedDocument) {
-              showToast(selectDocumentReason, 'warning');
-              return;
-            }
-
-            openDocumentPreview(selectedDocument.name, selectedDocumentSource, (
-              <div>
-                <p className="text-sm font-semibold text-gray-900">Mock extracted values</p>
-                <pre className="mt-2 bg-gray-900 text-gray-100 rounded-lg p-3 overflow-y-auto whitespace-pre-wrap break-words text-xs">{JSON.stringify(selectedDocument.extractedValues, null, 2)}</pre>
-              </div>
-            ));
-          }}>View Document</ActionButton>
           <ActionButton disabled={!canActOnDocument} disabledReason={documentEditDisabledReason} onClick={() => selectedDocument && confirmGuidedAction({ title: 'Mark Document Verified', guidance: 'Confirm you reviewed the document and the information is acceptable.', confirmLabel: 'Mark Verified', onConfirm: () => updateDocument(selectedDocument.id, (documentItem) => ({ ...documentItem, status: 'Verified' }), 'Document Verified', `${selectedDocument.name} marked verified.`) })}>Mark Verified</ActionButton>
           <ActionButton disabled={!canActOnDocument} disabledReason={documentEditDisabledReason} onClick={() => selectedDocument && confirmGuidedAction({ title: 'Mark Document Insufficient', guidance: 'Use this when the document is unreadable, incomplete, expired, or does not match the requested verification.', confirmLabel: 'Mark Insufficient', onConfirm: () => updateDocument(selectedDocument.id, (documentItem) => ({ ...documentItem, status: 'Insufficient' }), 'Document Marked Insufficient', `${selectedDocument.name} marked insufficient.`) })}>Mark Insufficient</ActionButton>
-          <ActionButton disabled={!canActOnDocument} disabledReason={documentEditDisabledReason} onClick={() => selectedDocument && updateDocument(selectedDocument.id, (documentItem) => ({ ...documentItem, status: 'Replacement Requested' }), 'Replacement Requested', `Replacement requested for ${selectedDocument.name}.`)}>Request Replacement</ActionButton>
-          <ActionButton disabled={!canActOnDocument} disabledReason={documentEditDisabledReason} onClick={() => selectedDocument && updateDocument(selectedDocument.id, (documentItem) => ({ ...documentItem, status: 'Replaced', confidence: 92, extractedValues: { ...documentItem.extractedValues, confidenceScore: 92 } }), 'Applicant Response Received', `Replacement uploaded for ${selectedDocument.name}.`)}>Simulate Replacement Upload</ActionButton>
-          <ActionButton disabled={!canActOnDocument} disabledReason={documentEditDisabledReason} onClick={() => selectedDocument && updateDocument(selectedDocument.id, (documentItem) => ({ ...documentItem, notes: [...documentItem.notes, 'Document note added in local prototype.'] }), 'Worker Note Added', `Document note added for ${selectedDocument.name}.`)}>Add Document Note</ActionButton>
         </>
       ),
       Clearance: (
-        <>
-          <ActionButton variant="primary" onClick={() => runCaseAction('Clearance', 'Mock Clearance Search Run', 'CIN / SIN matching search simulated locally.', undefined, 'System actions', 'Mock search completed.')}>Run Mock Search</ActionButton>
-          <ActionButton onClick={() => showToast('Identifier terminology is configurable for the demo.', 'info')}>Add Override Reason</ActionButton>
-        </>
+        <>{viewAllActionsButton}</>
       ),
       'External Validation': (
         <>
-          <ActionButton disabled={!roleCanEdit(role, activeTab)} onClick={() => updateValidation('Employment / UIB Check', 'Complete', 'Mock employment check completed.', 'External Validation Completed')}>Run Mock Employment Check</ActionButton>
-          <ActionButton disabled={!roleCanEdit(role, activeTab)} onClick={() => updateValidation('Tax Record Check', 'Complete', 'Mock tax check completed.', 'External Validation Completed')}>Run Mock Tax Check</ActionButton>
-          <ActionButton disabled={!roleCanEdit(role, activeTab)} onClick={() => updateValidation('Paystub Comparison', 'Discrepancy Found', 'Mock paystub discrepancy found.', 'Data Discrepancy Found')}>Compare Paystub</ActionButton>
-          <ActionButton disabled={!roleCanEdit(role, activeTab)} onClick={() => updateValidation('Data Discrepancy Summary', 'Worker Review Required', 'Discrepancy routed for worker review.', 'Discrepancy Reviewed')}>Review Discrepancy</ActionButton>
+          {viewAllActionsButton}
           <ActionButton disabled={!roleCanEdit(role, activeTab)} onClick={() => runCaseAction('External Validation', 'External Validations Reviewed', 'Worker marked validations complete.', (caseItem) => ({ ...caseItem, validations: caseItem.validations.map((validation) => ({ ...validation, status: 'Complete' })) }))}>Mark Validation Complete</ActionButton>
         </>
       ),
       Budget: (
         <>
-          <ActionButton disabled={!roleCanEdit(role, activeTab)} onClick={() => runCaseAction('Budget', 'Budget Created', 'Mock budget created.', (caseItem) => ({ ...caseItem, budget: { ...caseItem.budget, status: 'Budget created' } }))}>Create Budget</ActionButton>
-          <ActionButton disabled={!roleCanEdit(role, activeTab)} onClick={() => runCaseAction('Budget', 'Budget Calculation Successful', 'Mock calculation succeeded.', (caseItem) => ({ ...caseItem, budget: { ...caseItem.budget, status: 'Calculation successful', mockBenefitAmount: '$298/month' } }))}>Simulate Successful Calculation</ActionButton>
-          <ActionButton disabled={!roleCanEdit(role, activeTab)} onClick={() => runCaseAction('Budget', 'Budget Calculation Error', 'Mock calculation error created.', (caseItem) => ({ ...caseItem, budget: { ...caseItem.budget, status: 'Calculation error' } }), 'System actions', 'Mock error state shown.')}>Simulate Error</ActionButton>
-          <ActionButton onClick={() => setModal({ title: 'Budget Result', body: <pre className="bg-gray-900 text-gray-100 rounded-lg p-3 overflow-y-auto whitespace-pre-wrap break-words text-xs">{JSON.stringify(selectedCase.budget, null, 2)}</pre> })}>Review Result</ActionButton>
-          <ActionButton disabled={!roleCanEdit(role, activeTab) || !budgetCreated} disabledReason={!budgetCreated ? 'Mark Budget Reviewed disabled because a mock budget has not been created.' : editDisabledReason(activeTab)} onClick={() => runCaseAction('Budget', 'Budget Reviewed', 'Worker marked budget reviewed.', (caseItem) => ({ ...caseItem, checklist: caseItem.checklist.map((item) => item.label === 'Budget reviewed' ? { ...item, status: 'Complete' } : item), status: 'Ready for Budget' }))}>Mark Budget Reviewed</ActionButton>
+          {viewAllActionsButton}
+          <ActionButton disabled={!canCreateBudget} disabledReason={budgetCreated ? 'Create Budget is unavailable because a budget already exists.' : editDisabledReason('Budget')} onClick={() => runCaseAction('Budget', 'Budget Created', 'Budget created locally.', (caseItem) => ({ ...caseItem, budget: { ...caseItem.budget, status: 'Budget created' } }))}>Create Budget</ActionButton>
+          <ActionButton disabled={!canReviewBudget} disabledReason={!budgetCreated ? 'Mark Budget Reviewed disabled because a budget has not been created.' : editDisabledReason('Budget')} onClick={() => runCaseAction('Budget', 'Budget Reviewed', 'Worker marked budget reviewed.', (caseItem) => ({ ...caseItem, checklist: caseItem.checklist.map((item) => item.label === 'Budget reviewed' ? { ...item, status: 'Complete' } : item), status: 'Ready for Budget' }))}>Mark Budget Reviewed</ActionButton>
         </>
       ),
       'Forms & Notices': (
         <>
-          <select value={reasonCodeDraft} onChange={(event) => setReasonCodeDraft(event.target.value)} className="flex-none px-3 py-2 border border-gray-300 bg-white rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm" title={tooltips.reasonCode}>
-            {reasonCodeOptions.map((option) => <option key={option}>{option}</option>)}
-          </select>
-          <ActionButton disabled={!roleCanEdit(role, activeTab)} onClick={() => runCaseAction('Forms & Notices', 'Reason Code Added', `${reasonCodeDraft} added locally.`, (caseItem) => ({ ...caseItem, notices: [...caseItem.notices, { id: `${caseItem.mybNumber}-notice-${Date.now()}`, reasonCode: reasonCodeDraft, requiresText: reasonCodeDraft.includes('dynamic') || reasonCodeDraft.includes('Missing'), dynamicText: '', status: 'Draft' }] }), 'Notice events')}>Add Reason Code</ActionButton>
-          <ActionButton disabled={!roleCanEdit(role, activeTab)} onClick={() => runCaseAction('Forms & Notices', 'Reason Code Removed', 'Last reason code removed locally.', (caseItem) => ({ ...caseItem, notices: caseItem.notices.slice(0, Math.max(1, caseItem.notices.length - 1)) }), 'Notice events')}>Remove Reason Code</ActionButton>
-          <ActionButton disabled={!roleCanEdit(role, activeTab)} disabledReason={editDisabledReason(activeTab)} onClick={() => confirmGuidedAction({ title: 'Generate Notice Preview', guidance: 'Review the selected reason codes and any dynamic text before approving the notice.', confirmLabel: 'Generate Preview', onConfirm: () => runCaseAction('Forms & Notices', 'Notice Generated', 'Notice preview generated locally.', (caseItem) => ({ ...caseItem, notices: caseItem.notices.map((notice) => ({ ...notice, status: 'Preview Generated' })) }), 'Notice events') })}>Generate Notice Preview</ActionButton>
+          {viewAllActionsButton}
           <ActionButton disabled={!roleCanEdit(role, activeTab) || !noticePreviewGenerated} disabledReason={!noticePreviewGenerated ? 'Approve Notice disabled because a notice preview has not been generated.' : editDisabledReason(activeTab)} onClick={() => runCaseAction('Forms & Notices', 'Notice Approved', 'Notice approved locally.', (caseItem) => ({ ...caseItem, notices: caseItem.notices.map((notice) => ({ ...notice, status: 'Approved' })) }), 'Notice events')}>Approve Notice</ActionButton>
           <ActionButton disabled={!roleCanEdit(role, activeTab)} onClick={() => runCaseAction('Forms & Notices', 'Mock Notice Sent', 'Mock notice sent locally.', (caseItem) => ({ ...caseItem, notices: caseItem.notices.map((notice) => ({ ...notice, status: 'Sent' })) }), 'Notice events')}>Send Mock Notice</ActionButton>
-          <ActionButton onClick={() => showToast('Print Form is mocked; no correspondence system is connected.', 'info')}>Print Form</ActionButton>
         </>
       ),
       'Timeline / Audit': null,
       'Raw Case JSON': (
         <>
-          <ActionButton onClick={() => void copyJson(selectedCase)}>Copy JSON</ActionButton>
-          <ActionButton disabled={!roleCanEdit(role, activeTab)} onClick={() => {
-            const original = initialCases.find((caseItem) =>
-              caseItem.id === selectedCase.id || caseItem.mybNumber === selectedCase.mybNumber
-            );
-            if (original) {
-              updateCase(selectedCase.id, () => ({ ...original, id: selectedCase.id }));
-              showToast('Selected case reset locally.', 'success');
-            }
-          }}>Reset Case Data</ActionButton>
+          {viewAllActionsButton}
           <ActionButton onClick={() => exportJson(selectedCase)}>Download JSON</ActionButton>
         </>
       ),
     };
     const activeActions = actionsByTab[activeTab];
-    const viewAllActionsButton = activeTab !== 'Summary' ? (
-      <ActionButton variant={activeTab === 'Actions' ? 'primary' : undefined} onClick={() => setActiveTab('Actions')}>
-        View All Actions
-      </ActionButton>
-    ) : null;
 
-    if (!activeActions && !viewAllActionsButton) {
+    if (!activeActions) {
       return null;
     }
 
     return (
       <div className="flex min-w-0 flex-1 justify-end">
         <div className="flex flex-nowrap gap-2 overflow-x-auto pb-1">
-          {viewAllActionsButton}
           {activeActions}
         </div>
       </div>
@@ -4495,12 +4630,12 @@ function App() {
       <DemoBanner />
       <ScreenGuidance context="operations" />
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-5">
-        <MetricCard label="Average case age" value={metrics.averageCaseAge} tone="gray" />
-        <MetricCard label="Due soon count" value={metrics.dueSoon} tone="red" />
-        <MetricCard label="Missing information count" value={metrics.missingInfo} tone="yellow" />
-        <MetricCard label="Document review count" value={metrics.needingDocuments} tone="orange" />
-        <MetricCard label="Clearance review count" value={metrics.clearanceReview} tone="purple" />
-        <MetricCard label="Supervisor review count" value={metrics.supervisorReview} tone="purple" />
+        <MetricCard label="Average case age" value={operationsMetrics.averageCaseAge} tone="gray" detail="Sample data" />
+        <MetricCard label="Due soon count" value={operationsMetrics.dueSoon} tone="red" detail="Sample data" />
+        <MetricCard label="Missing information count" value={operationsMetrics.missingInfo} tone="yellow" detail="Sample data" />
+        <MetricCard label="Document review count" value={operationsMetrics.needingDocuments} tone="orange" detail="Sample data" />
+        <MetricCard label="Clearance review count" value={operationsMetrics.clearanceReview} tone="purple" detail="Sample data" />
+        <MetricCard label="Supervisor review count" value={operationsMetrics.supervisorReview} tone="purple" detail="Sample data" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -4560,7 +4695,7 @@ function App() {
       </SectionCard>
 
       <HelpBox>
-        Operations dashboard metrics are derived from mock cases. Click a county, status bar, or bottleneck to filter the inbox.
+        Operations dashboard metrics use fixed sample data for the demo. Click a county, status bar, or bottleneck to filter the inbox.
       </HelpBox>
     </div>
   );

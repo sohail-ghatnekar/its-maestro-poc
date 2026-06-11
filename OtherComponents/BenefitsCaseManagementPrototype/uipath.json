@@ -1,5 +1,5 @@
 {
-  "scope": "OR.Execution OR.Execution.Read OR.Jobs OR.Tasks PIMS DataFabric.Schema.Read DataFabric.Data.Read DataFabric.Data.Write OR.Folders.Read",
+  "scope": "OR.Execution OR.Execution.Read OR.Jobs OR.Tasks PIMS DataFabric.Schema.Read DataFabric.Data.Read DataFabric.Data.Write OR.Administration.Read OR.Folders.Read",
   "clientId": "",
   "orgName": "82e69757-09ff-4e6d-83e7-d530f2ac4e7b",
   "tenantName": "bd829329-42ff-40aa-96dc-95a78168275a",
