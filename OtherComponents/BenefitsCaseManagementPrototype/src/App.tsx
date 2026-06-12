@@ -25,6 +25,8 @@ import {
   getLiveRecordInstanceId,
   getTasksForTab,
   startMaestroCase,
+  startTaskAssignmentProcess,
+  startWorkerPtoProcess,
 } from './services/uipathCaseManagement';
 import type {
   LiveCaseRecord,
@@ -40,7 +42,6 @@ import {
   regionOptions,
   roles,
   statusOptions,
-  workerUsers,
 } from './mockData';
 import type {
   AuditCategory,
@@ -68,6 +69,7 @@ import type { HelpCategory, HelpContextId } from './helpContent';
 import uiPathLogoUrl from './assets/uipath-logo-digital-rgb-b.svg';
 
 type Screen = 'inbox' | 'detail' | 'operations' | 'assignment' | 'testing' | 'settings' | 'helpCenter';
+type OperationsSubtab = 'Operations Summary' | 'IES SNAP Dash';
 type DetailTab =
   | 'Summary'
   | 'Actions'
@@ -146,6 +148,59 @@ interface Filters {
   assignedGroup: string;
 }
 
+type LocalAssignmentTaskStatus = 'Ready' | 'Queued' | 'Completed';
+type AssignmentSubtab = 'Task Assignments' | 'PTO Calendar' | 'My Team';
+type AssignmentRoutingMode = 'User' | 'Workload based' | 'All users of group' | 'Round robin';
+
+interface LocalAssignmentUser {
+  name: string;
+  email: string;
+  assignedGroup: string;
+}
+
+interface LocalAssignmentOverride {
+  assignedTo: string;
+  assignedGroup: string;
+}
+
+interface LocalPtoEntry {
+  id: string;
+  userName: string;
+  workerEmail: string;
+  assignedGroup: string;
+  startDate: string;
+  endDate: string;
+  reason: string;
+}
+
+interface LocalPtoCalendarDay {
+  date: string;
+  dayOfMonth: number;
+  isCurrentMonth: boolean;
+  entries: LocalPtoEntry[];
+}
+
+interface LocalAssignmentTask {
+  id: string;
+  caseId: string;
+  caseNumber: string;
+  applicantName: string;
+  county: string;
+  priority: Priority;
+  taskName: string;
+  appName: string;
+  taskId?: number;
+  process: string;
+  lane: string;
+  tab: LiveActionAppTab;
+  status: LocalAssignmentTaskStatus;
+  assignedTo: string;
+  assignedGroup: string;
+  dueDate: string;
+  isAssignedUserOnPto: boolean;
+  actionDefinition?: ActionAppDefinition;
+}
+
 const emptyFilters: Filters = {
   search: '',
   county: 'all',
@@ -157,6 +212,71 @@ const emptyFilters: Filters = {
   expedited: false,
   assignedGroup: 'all',
 };
+
+const defaultAssignmentUsers: LocalAssignmentUser[] = [
+  {
+    name: 'Sohail Ghatnekar',
+    email: IES_WORKFLOW_CONFIG.defaultApplicantEmail,
+    assignedGroup: 'Eligibility Review',
+  },
+  {
+    name: 'Maya Rivera',
+    email: 'maya.rivera@uipath.com',
+    assignedGroup: 'Document Review',
+  },
+  {
+    name: 'Noah Chen',
+    email: 'noah.chen@uipath.com',
+    assignedGroup: 'Clearance Unit',
+  },
+  {
+    name: 'Priya Shah',
+    email: 'priya.shah@uipath.com',
+    assignedGroup: 'Budget Unit',
+  },
+];
+
+const assignmentTaskStatusOptions: Array<LocalAssignmentTaskStatus | 'all'> = [
+  'all',
+  'Ready',
+  'Queued',
+  'Completed',
+];
+
+const defaultAssignmentTaskStatusFilter: LocalAssignmentTaskStatus | 'all' = 'Ready';
+
+const operationsSubtabOptions: OperationsSubtab[] = ['Operations Summary', 'IES SNAP Dash'];
+const assignmentSubtabOptions: AssignmentSubtab[] = ['Task Assignments', 'PTO Calendar', 'My Team'];
+const caseWorkerAssignmentSubtabOptions: AssignmentSubtab[] = ['PTO Calendar'];
+const assignmentRoutingModeOptions: AssignmentRoutingMode[] = [
+  'User',
+  'Workload based',
+  'All users of group',
+  'Round robin',
+];
+
+const defaultTaskAssignmentEmail = 'sohail.ghatnekar@uipath.com';
+
+const defaultAssignmentPtoEntries: LocalPtoEntry[] = [
+  {
+    id: 'pto-sohail-2026-06-10',
+    userName: 'Sohail Ghatnekar',
+    workerEmail: IES_WORKFLOW_CONFIG.defaultApplicantEmail,
+    assignedGroup: 'Eligibility Review',
+    startDate: '2026-06-10',
+    endDate: '2026-06-12',
+    reason: 'PTO',
+  },
+  {
+    id: 'pto-maya-2026-06-16',
+    userName: 'Maya Rivera',
+    workerEmail: 'maya.rivera@uipath.com',
+    assignedGroup: 'Document Review',
+    startDate: '2026-06-16',
+    endDate: '2026-06-17',
+    reason: 'PTO',
+  },
+];
 
 const demoOperationsMetrics = {
   averageCaseAge: '18 days',
@@ -313,17 +433,6 @@ const externalValidationRevealEventTypes = [
 ];
 
 const nysItsLogoUrl = 'https://its.ny.gov/profiles/custom/webny/themes/custom/webny_theme/images/nygov-logo.png';
-
-const assignmentMethodOptions = [
-  'User',
-  'Workload based',
-  'All users of group',
-  'Round robin',
-  'Custom',
-] as const;
-
-type AssignmentMethod = typeof assignmentMethodOptions[number];
-const enforceSupervisorAssignmentDashboardAccess = false;
 
 function getErrorMessage(error: unknown): string {
   const details = error as {
@@ -583,14 +692,6 @@ const countyRegionMap: Record<string, string> = {
   Hamilton: 'North Country',
   Monroe: 'Finger Lakes',
   Queens: 'NYC',
-};
-
-const assignmentStageByMethod: Record<AssignmentMethod, string> = {
-  User: 'Assigned to user',
-  'Workload based': 'Workload assignment',
-  'All users of group': 'Group assignment',
-  'Round robin': 'Round robin assignment',
-  Custom: 'Custom assignment',
 };
 
 function firstRecordValue(record: LiveCaseRecord, keys: readonly string[]): unknown {
@@ -1076,65 +1177,6 @@ function compareCasesNewestFirst(left: BenefitCase, right: BenefitCase): number 
   });
 }
 
-function hashText(value: string): number {
-  return [...value].reduce((total, character) => total + character.charCodeAt(0), 0);
-}
-
-function getLeastLoadedWorker(allCases: BenefitCase[], fallbackWorker: string): string {
-  const counts = workerUsers.reduce<Record<string, number>>((result, worker) => {
-    result[worker] = allCases.filter((caseItem) => caseItem.assignedWorker === worker).length;
-    return result;
-  }, {});
-
-  return workerUsers
-    .slice()
-    .sort((left, right) => (counts[left] ?? 0) - (counts[right] ?? 0))[0] || fallbackWorker;
-}
-
-function getAssignmentRouting(
-  method: AssignmentMethod,
-  caseItem: BenefitCase,
-  allCases: BenefitCase[],
-  currentWorker: string,
-): Pick<BenefitCase, 'assignedGroup' | 'assignedWorker' | 'currentStage'> {
-  const defaultGroup = caseItem.assignedGroup || 'Eligibility Review';
-
-  switch (method) {
-    case 'User':
-      return {
-        assignedGroup: defaultGroup,
-        assignedWorker: currentWorker,
-        currentStage: assignmentStageByMethod[method],
-      };
-    case 'Workload based':
-      return {
-        assignedGroup: defaultGroup,
-        assignedWorker: getLeastLoadedWorker(allCases, currentWorker),
-        currentStage: assignmentStageByMethod[method],
-      };
-    case 'All users of group':
-      return {
-        assignedGroup: defaultGroup,
-        assignedWorker: 'Group queue',
-        currentStage: assignmentStageByMethod[method],
-      };
-    case 'Round robin': {
-      const worker = workerUsers[hashText(caseItem.mybNumber) % workerUsers.length] || currentWorker;
-      return {
-        assignedGroup: defaultGroup,
-        assignedWorker: worker,
-        currentStage: assignmentStageByMethod[method],
-      };
-    }
-    case 'Custom':
-      return {
-        assignedGroup: 'Supervisor Queue',
-        assignedWorker: 'Custom routing rule',
-        currentStage: assignmentStageByMethod[method],
-      };
-  }
-}
-
 function mapLiveRecordToCase(record: LiveCaseRecord): BenefitCase {
   const rawCase = parseRawCaseJson(record);
   const recordId = readRecordString(record, liveCaseFieldKeys.id);
@@ -1354,6 +1396,20 @@ function formatDate(value: string): string {
   });
 }
 
+function dateToIso(value: Date): string {
+  return value.toISOString().slice(0, 10);
+}
+
+function getInclusiveDayCount(startDate: string, endDate: string): number {
+  const start = new Date(`${startDate}T12:00:00`);
+  const end = new Date(`${endDate}T12:00:00`);
+  return Math.max(1, Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1);
+}
+
+function formatDateRange(startDate: string, endDate: string): string {
+  return startDate === endDate ? formatDate(startDate) : `${formatDate(startDate)} - ${formatDate(endDate)}`;
+}
+
 function formatDateTime(value: string): string {
   const parsed = Date.parse(value);
 
@@ -1462,8 +1518,12 @@ function roleCanEdit(role: Role, area: DetailTab | Screen): boolean {
     return false;
   }
 
+  if (area === 'assignment') {
+    return role === 'Supervisor';
+  }
+
   if (role === 'Admin / Operations') {
-    return area === 'operations' || area === 'assignment' || area === 'settings' || area === 'Raw Case JSON';
+    return area === 'operations' || area === 'settings' || area === 'Raw Case JSON';
   }
 
   if (role === 'Document Reviewer') {
@@ -1580,6 +1640,314 @@ function caseHasMovedPastStage(caseItem: BenefitCase, stageOrder: number): boole
   }
 
   return ['Ready for Budget', 'Approved', 'Denied', 'Withdrawn'].includes(caseItem.status);
+}
+
+function getEffectiveCaseStageOrder(caseItem: BenefitCase): number {
+  const stageOrder = getCaseStageOrder(caseItem);
+
+  if (stageOrder !== null) {
+    return stageOrder;
+  }
+
+  switch (caseItem.status) {
+    case 'Missing Information':
+      return 2;
+    case 'Document Review':
+      return 3;
+    case 'Clearance Review':
+      return 4;
+    case 'Ready for Budget':
+      return 6;
+    case 'Approved':
+    case 'Denied':
+    case 'Withdrawn':
+      return 8;
+    case 'Pending Review':
+      return 1;
+  }
+}
+
+function getAssignmentTaskStageOrder(definition: ActionAppDefinition): number {
+  if (definition.id === 'main-supervisor-review') {
+    return 8;
+  }
+
+  switch (definition.tab) {
+    case 'Interview / Missing Info':
+      return 2;
+    case 'Documents':
+      return 3;
+    case 'Clearance':
+      return 4;
+    case 'External Validation':
+      return 5;
+    case 'Budget':
+      return 6;
+    case 'Summary':
+      return 8;
+  }
+}
+
+function getDefaultAssignmentGroup(definition: ActionAppDefinition, caseItem: BenefitCase): string {
+  if (definition.lane === 'Supervisor' || definition.id === 'main-supervisor-review') {
+    return 'Supervisor Queue';
+  }
+
+  switch (definition.tab) {
+    case 'Documents':
+      return 'Document Review';
+    case 'Clearance':
+      return 'Clearance Unit';
+    case 'Budget':
+      return 'Budget Unit';
+    case 'External Validation':
+      return caseItem.assignedGroup === 'Operations' ? 'Operations' : 'Eligibility Review';
+    case 'Interview / Missing Info':
+    case 'Summary':
+      return caseItem.assignedGroup || 'Eligibility Review';
+  }
+}
+
+function getPtoEntriesForDate(userName: string, date: string, ptoEntries: LocalPtoEntry[]): LocalPtoEntry[] {
+  return ptoEntries.filter((entry) =>
+    entry.userName === userName
+    && entry.startDate <= date
+    && entry.endDate >= date
+  );
+}
+
+function isUserOnPto(userName: string, date: string, ptoEntries: LocalPtoEntry[]): boolean {
+  if (!userName || userName === 'Unassigned') {
+    return false;
+  }
+
+  return getPtoEntriesForDate(userName, date, ptoEntries).length > 0;
+}
+
+function getAvailableAssignmentUsers(
+  users: LocalAssignmentUser[],
+  assignedGroup: string,
+  dueDate: string,
+  ptoEntries: LocalPtoEntry[],
+): LocalAssignmentUser[] {
+  const groupUsers = users.filter((user) => user.assignedGroup === assignedGroup);
+  const candidateUsers = groupUsers.length ? groupUsers : users;
+  const availableGroupUsers = candidateUsers.filter((user) => !isUserOnPto(user.name, dueDate, ptoEntries));
+
+  if (availableGroupUsers.length > 0) {
+    return availableGroupUsers;
+  }
+
+  return users.filter((user) => !isUserOnPto(user.name, dueDate, ptoEntries));
+}
+
+function buildLocalPtoCalendarDays(monthValue: string, ptoEntries: LocalPtoEntry[]): LocalPtoCalendarDay[] {
+  const monthStart = new Date(`${monthValue}-01T12:00:00`);
+  const calendarStart = new Date(monthStart);
+  calendarStart.setDate(monthStart.getDate() - monthStart.getDay());
+  const currentMonth = monthStart.getMonth();
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(calendarStart);
+    date.setDate(calendarStart.getDate() + index);
+    const isoDate = dateToIso(date);
+
+    return {
+      date: isoDate,
+      dayOfMonth: date.getDate(),
+      isCurrentMonth: date.getMonth() === currentMonth,
+      entries: ptoEntries.filter((entry) => entry.startDate <= isoDate && entry.endDate >= isoDate),
+    };
+  });
+}
+
+function getDefaultAssignmentUser(
+  definition: ActionAppDefinition,
+  caseItem: BenefitCase,
+  users: LocalAssignmentUser[],
+  ptoEntries: LocalPtoEntry[],
+  fallbackIndex: number,
+): string {
+  const defaultGroup = getDefaultAssignmentGroup(definition, caseItem);
+  const allowedUserNames = new Set(users.map((user) => user.name));
+
+  if (
+    caseItem.assignedWorker
+    && caseItem.assignedWorker !== 'Group queue'
+    && allowedUserNames.has(caseItem.assignedWorker)
+    && caseItem.assignedGroup === defaultGroup
+    && !isUserOnPto(caseItem.assignedWorker, caseItem.eligibilityDueDate, ptoEntries)
+  ) {
+    return caseItem.assignedWorker;
+  }
+
+  const candidateUsers = getAvailableAssignmentUsers(users, defaultGroup, caseItem.eligibilityDueDate, ptoEntries);
+
+  return candidateUsers[fallbackIndex % Math.max(1, candidateUsers.length)]?.name || 'Unassigned';
+}
+
+function getAssignmentUserDisplayName(assignedTo: string | null, users: LocalAssignmentUser[]): string | null {
+  if (!assignedTo) {
+    return null;
+  }
+
+  const normalizedAssignedTo = assignedTo.trim().toLowerCase();
+  const matchedUser = users.find((user) =>
+    user.name.toLowerCase() === normalizedAssignedTo
+    || user.email.toLowerCase() === normalizedAssignedTo
+  );
+
+  return matchedUser?.name || assignedTo;
+}
+
+function getLocalAssignmentTaskStatus(
+  caseItem: BenefitCase,
+  definition: ActionAppDefinition,
+): LocalAssignmentTaskStatus {
+  if (['Approved', 'Denied', 'Withdrawn'].includes(caseItem.status)) {
+    return 'Completed';
+  }
+
+  if (definition.id === 'main-supervisor-review') {
+    return caseItem.exception === 'Supervisor Review' ? 'Ready' : 'Queued';
+  }
+
+  if (
+    definition.tab === 'Interview / Missing Info'
+    && (caseItem.status === 'Missing Information' || caseItem.interview.missingFields.length > 0)
+  ) {
+    return caseItem.interview.applicantResponseStatus === 'Waiting for Response' ? 'Queued' : 'Ready';
+  }
+
+  if (
+    definition.tab === 'Documents'
+    && caseItem.documents.some((documentItem) => ['Needs Review', 'Insufficient', 'Uploaded'].includes(documentItem.status))
+  ) {
+    return 'Ready';
+  }
+
+  if (
+    definition.tab === 'Clearance'
+    && (caseItem.status === 'Clearance Review' || caseItem.exception === 'Clearance Match')
+  ) {
+    return 'Ready';
+  }
+
+  if (
+    definition.tab === 'External Validation'
+    && caseItem.validations.some((validation) => ['Discrepancy Found', 'Worker Review Required'].includes(validation.status))
+  ) {
+    return 'Ready';
+  }
+
+  if (definition.tab === 'Budget' && caseItem.status === 'Ready for Budget') {
+    return 'Ready';
+  }
+
+  const caseStageOrder = getEffectiveCaseStageOrder(caseItem);
+  const taskStageOrder = getAssignmentTaskStageOrder(definition);
+
+  if (taskStageOrder < caseStageOrder) {
+    return 'Completed';
+  }
+
+  if (taskStageOrder === caseStageOrder) {
+    return 'Ready';
+  }
+
+  return 'Queued';
+}
+
+function buildLocalAssignmentTasks(
+  caseItems: BenefitCase[],
+  users: LocalAssignmentUser[],
+  overrides: Record<string, LocalAssignmentOverride>,
+  ptoEntries: LocalPtoEntry[],
+  liveTasksByCaseId: Record<string, LiveTaskSummary[]> = {},
+): LocalAssignmentTask[] {
+  return caseItems.flatMap((caseItem, caseIndex) => {
+    const liveTasksForCase = liveTasksByCaseId[caseItem.id] || [];
+    const liveTaskRows = buildActionTaskRows(liveTasksForCase);
+    const liveTaskByDefinitionId = new Map<string, LiveTaskSummary>();
+    const matchedLiveTaskIds = new Set<number>();
+
+    for (const row of liveTaskRows) {
+      if (row.task) {
+        liveTaskByDefinitionId.set(row.definition.id, row.task);
+        matchedLiveTaskIds.add(row.task.id);
+      }
+    }
+
+    const definitionRows: LocalAssignmentTask[] = ACTION_APP_DEFINITIONS.map((definition, definitionIndex) => {
+      const id = `${caseItem.id}-${definition.id}`;
+      const fallbackIndex = caseIndex + definitionIndex;
+      const override = overrides[id];
+      const assignedGroup = override?.assignedGroup || getDefaultAssignmentGroup(definition, caseItem);
+      const liveTask = liveTaskByDefinitionId.get(definition.id);
+      const liveAssignedTo = getAssignmentUserDisplayName(liveTask?.assignedTo || null, users);
+      const assignedTo = override?.assignedTo
+        || (liveTask ? liveAssignedTo || 'Unassigned' : null)
+        || getDefaultAssignmentUser(definition, caseItem, users, ptoEntries, fallbackIndex);
+
+      return {
+        id,
+        caseId: caseItem.id,
+        caseNumber: caseItem.mybNumber,
+        applicantName: caseItem.applicantName,
+        county: caseItem.county,
+        priority: caseItem.priority,
+        taskName: definition.name,
+        appName: definition.appName,
+        taskId: liveTask?.id,
+        process: definition.process,
+        lane: definition.lane,
+        tab: definition.tab,
+        status: liveTask && !isLiveTaskCompleted(liveTask) ? 'Ready' : getLocalAssignmentTaskStatus(caseItem, definition),
+        assignedTo,
+        assignedGroup,
+        dueDate: caseItem.eligibilityDueDate,
+        isAssignedUserOnPto: isUserOnPto(assignedTo, caseItem.eligibilityDueDate, ptoEntries),
+        actionDefinition: definition,
+      };
+    });
+
+    const extraLiveTaskRows: LocalAssignmentTask[] = liveTasksForCase
+      .filter((task) => !matchedLiveTaskIds.has(task.id))
+      .map((task) => {
+        const definition = task.appDefinition || undefined;
+        const id = `${caseItem.id}-live-task-${task.id}`;
+        const override = overrides[id];
+        const assignedGroup = override?.assignedGroup
+          || (definition ? getDefaultAssignmentGroup(definition, caseItem) : caseItem.assignedGroup || 'Eligibility Review');
+        const liveAssignedTo = getAssignmentUserDisplayName(task.assignedTo, users);
+        const assignedTo = override?.assignedTo || liveAssignedTo || 'Unassigned';
+
+        const status: LocalAssignmentTaskStatus = isLiveTaskCompleted(task) ? 'Completed' : 'Ready';
+
+        return {
+          id,
+          caseId: caseItem.id,
+          caseNumber: caseItem.mybNumber,
+          applicantName: caseItem.applicantName,
+          county: caseItem.county,
+          priority: caseItem.priority,
+          taskName: definition?.name || task.title || `Action Center task ${task.id}`,
+          appName: definition?.appName || task.actionLabel || task.action || 'Action Center',
+          taskId: task.id,
+          process: definition?.process || 'UiPath Action Center',
+          lane: definition?.lane || 'Case Worker',
+          tab: definition?.tab || 'Summary',
+          status,
+          assignedTo,
+          assignedGroup,
+          dueDate: caseItem.eligibilityDueDate,
+          isAssignedUserOnPto: isUserOnPto(assignedTo, caseItem.eligibilityDueDate, ptoEntries),
+          actionDefinition: definition,
+        };
+      });
+
+    return [...definitionRows, ...extraLiveTaskRows];
+  });
 }
 
 function shouldShowClearanceResults(caseItem: BenefitCase, hasPendingTask: boolean): boolean {
@@ -2200,9 +2568,8 @@ function App() {
   const [screen, setScreen] = useState<Screen>('inbox');
   const [selectedCaseId, setSelectedCaseId] = useState('');
   const [activeTab, setActiveTab] = useState<DetailTab>('Summary');
-  const [assignmentMethod, setAssignmentMethod] = useState<AssignmentMethod>('User');
   const [role, setRole] = useState<Role>('Case Worker');
-  const [workerName, setWorkerName] = useState('Sohail Ghatnekar');
+  const [workerName, setWorkerName] = useState('Case Worker');
   const [countyScope, setCountyScope] = useState('All counties');
   const [regionScope, setRegionScope] = useState('All regions');
   const [showDemoBanner, setShowDemoBanner] = useState(true);
@@ -2212,6 +2579,7 @@ function App() {
   const [helpCategory, setHelpCategory] = useState<HelpCategory | 'All'>('All');
   const [filters, setFilters] = useState<Filters>(emptyFilters);
   const [inboxPage, setInboxPage] = useState(1);
+  const [activeOperationsSubtab, setActiveOperationsSubtab] = useState<OperationsSubtab>('Operations Summary');
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [modal, setModal] = useState<ModalState | null>(null);
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
@@ -2220,6 +2588,24 @@ function App() {
   const [testCommands, setTestCommands] = useState<Record<string, string>>(defaultTestCommands);
   const [mockTestRuns, setMockTestRuns] = useState<Record<string, string>>({});
   const [mockTestReturns, setMockTestReturns] = useState<Record<string, string>>({});
+  const assignmentUsers = defaultAssignmentUsers;
+  const [assignmentTaskOverrides, setAssignmentTaskOverrides] = useState<Record<string, LocalAssignmentOverride>>({});
+  const [assignmentTaskStatusFilter, setAssignmentTaskStatusFilter] = useState<LocalAssignmentTaskStatus | 'all'>(defaultAssignmentTaskStatusFilter);
+  const [assignmentTaskGroupFilter, setAssignmentTaskGroupFilter] = useState('all');
+  const [assignmentRoutingMode, setAssignmentRoutingMode] = useState<AssignmentRoutingMode>('User');
+  const [assignmentDialogTask, setAssignmentDialogTask] = useState<LocalAssignmentTask | null>(null);
+  const [assignmentDialogEmail, setAssignmentDialogEmail] = useState(defaultTaskAssignmentEmail);
+  const [assignmentDialogMode, setAssignmentDialogMode] = useState<AssignmentRoutingMode>('User');
+  const [activeAssignmentSubtab, setActiveAssignmentSubtab] = useState<AssignmentSubtab>('Task Assignments');
+  const [assignmentPtoEntries, setAssignmentPtoEntries] = useState<LocalPtoEntry[]>(defaultAssignmentPtoEntries);
+  const [assignmentPtoMonth, setAssignmentPtoMonth] = useState('2026-06');
+  const [newPtoUserName, setNewPtoUserName] = useState(defaultAssignmentUsers[0]?.name || '');
+  const [newPtoWorkerEmail, setNewPtoWorkerEmail] = useState(defaultAssignmentUsers[0]?.email || IES_WORKFLOW_CONFIG.defaultApplicantEmail);
+  const [newPtoStartDate, setNewPtoStartDate] = useState('2026-06-01');
+  const [newPtoEndDate, setNewPtoEndDate] = useState('2026-06-01');
+  const [newPtoReason, setNewPtoReason] = useState('PTO');
+  const [isStartingWorkerPto, setIsStartingWorkerPto] = useState(false);
+  const [startingTaskAssignmentId, setStartingTaskAssignmentId] = useState<string | null>(null);
   const [liveRecords, setLiveRecords] = useState<LiveCaseRecord[]>([]);
   const [liveDataStatus, setLiveDataStatus] = useState<LiveLoadState>('idle');
   const [liveDataError, setLiveDataError] = useState<string | null>(null);
@@ -2228,6 +2614,9 @@ function App() {
   const [liveTasks, setLiveTasks] = useState<LiveTaskSummary[]>([]);
   const [liveTaskStatus, setLiveTaskStatus] = useState<LiveLoadState>('idle');
   const [liveTaskError, setLiveTaskError] = useState<string | null>(null);
+  const [assignmentLiveTasksByCaseId, setAssignmentLiveTasksByCaseId] = useState<Record<string, LiveTaskSummary[]>>({});
+  const [assignmentLiveTaskStatus, setAssignmentLiveTaskStatus] = useState<LiveLoadState>('idle');
+  const [assignmentLiveTaskError, setAssignmentLiveTaskError] = useState<string | null>(null);
   const [isStartingMaestro, setIsStartingMaestro] = useState(false);
   const [activeTaskEmbed, setActiveTaskEmbed] = useState<TaskEmbedState | null>(null);
   const [inlineTaskEmbed, setInlineTaskEmbed] = useState<TaskEmbedState | null>(null);
@@ -2245,13 +2634,21 @@ function App() {
   const simulatedApplicationCase = cases.find((caseItem) => caseItem.mybNumber === 'MYB-1004')
     || initialCases.find((caseItem) => caseItem.mybNumber === 'MYB-1004')
     || selectedCase;
-  const canViewAssignmentDashboard = enforceSupervisorAssignmentDashboardAccess
-    ? isAuthenticated && role === 'Supervisor'
-    : true;
+  const canManageTaskAssignments = role === 'Supervisor';
+  const canSubmitWorkerPto = role === 'Case Worker' || canManageTaskAssignments;
+  const canViewAssignmentDashboard = canSubmitWorkerPto;
+  const visibleAssignmentSubtabs = canManageTaskAssignments ? assignmentSubtabOptions : caseWorkerAssignmentSubtabOptions;
+  const assignmentNavLabel = role === 'Supervisor' ? 'Assignment Dashboard' : 'PTO Calendar';
   const visibleDetailTabs = detailTabs;
   const uiPathConfigError = getUiPathConfigurationError(missingFields);
   const canUseUiPath = isAuthenticated && !isAuthLoading && !uiPathConfigError;
   const uiPathDisabledReason = uiPathConfigError || (!isAuthenticated ? 'Sign in to UiPath first.' : undefined);
+  const workerPtoDisabledReason = !canSubmitWorkerPto
+    ? `${role} cannot submit worker PTO in this prototype.`
+    : uiPathDisabledReason;
+  const taskAssignmentDisabledReason = !canManageTaskAssignments
+    ? `${role} cannot change task assignments in this prototype.`
+    : uiPathDisabledReason;
   const matchedLiveRecord = useMemo(
     () => findMatchingLiveRecord(liveRecords, selectedCase),
     [liveRecords, selectedCase],
@@ -2321,6 +2718,20 @@ function App() {
       setToasts((current) => current.filter((toast) => toast.id !== id));
     }, 3800);
   }, []);
+
+  useEffect(() => {
+    if (!visibleAssignmentSubtabs.includes(activeAssignmentSubtab)) {
+      setActiveAssignmentSubtab(visibleAssignmentSubtabs[0]);
+    }
+  }, [activeAssignmentSubtab, visibleAssignmentSubtabs]);
+
+  useEffect(() => {
+    const defaultRosterEmail = defaultAssignmentUsers[0]?.email || '';
+
+    if (role === 'Case Worker' && currentUserEmail && newPtoWorkerEmail === defaultRosterEmail) {
+      setNewPtoWorkerEmail(currentUserEmail);
+    }
+  }, [currentUserEmail, newPtoWorkerEmail, role]);
 
   useEffect(() => {
     let ignore = false;
@@ -2553,29 +2964,331 @@ function App() {
     showToast(toast, 'success');
   };
 
-  const applyAssignmentCriteria = () => {
-    if (!roleCanEdit(role, 'assignment')) {
+  const createPtoEntry = async () => {
+    if (!canSubmitWorkerPto) {
+      showToast(workerPtoDisabledReason || `${role} cannot submit worker PTO.`, 'warning');
+      return;
+    }
+
+    if (!canUseUiPath) {
+      showToast(workerPtoDisabledReason || 'Sign in to UiPath before setting PTO.', 'warning');
+      return;
+    }
+
+    const user = assignmentUsers.find((candidate) => candidate.name === newPtoUserName);
+    const normalizedWorkerEmail = newPtoWorkerEmail.trim().toLowerCase();
+    const normalizedReason = newPtoReason.trim() || 'PTO';
+
+    if (!user) {
+      showToast('Select a local assignment user before setting PTO.', 'warning');
+      return;
+    }
+
+    if (!normalizedWorkerEmail) {
+      showToast('Enter the worker email before setting PTO.', 'warning');
+      return;
+    }
+
+    if (newPtoEndDate < newPtoStartDate) {
+      showToast('PTO end date must be on or after the start date.', 'warning');
+      return;
+    }
+
+    setIsStartingWorkerPto(true);
+
+    try {
+      await startWorkerPtoProcess(sdk, {
+        startDate_In: newPtoStartDate,
+        endDate_In: newPtoEndDate,
+        workerEmail_In: normalizedWorkerEmail,
+      });
+
+      const nextEntry: LocalPtoEntry = {
+        id: `pto-${user.name.toLowerCase().replace(/\s+/g, '-')}-${newPtoStartDate}-${Date.now()}`,
+        userName: user.name,
+        workerEmail: normalizedWorkerEmail,
+        assignedGroup: user.assignedGroup,
+        startDate: newPtoStartDate,
+        endDate: newPtoEndDate,
+        reason: normalizedReason,
+      };
+
+      setAssignmentPtoEntries((current) => [...current, nextEntry]);
+      setAssignmentPtoMonth(newPtoStartDate.slice(0, 7));
+      showToast(`Worker PTO process started for ${user.name}.`, 'success');
+    } catch (error) {
+      console.warn('Worker PTO process start failed.', error);
+      showToast(`Worker PTO process start failed: ${getErrorMessage(error)}`, 'error');
+    } finally {
+      setIsStartingWorkerPto(false);
+    }
+  };
+
+  const removePtoEntry = (entryId: string) => {
+    if (!canSubmitWorkerPto) {
+      showToast(workerPtoDisabledReason || `${role} cannot remove worker PTO in this prototype.`, 'warning');
+      return;
+    }
+
+    setAssignmentPtoEntries((current) => current.filter((entry) => entry.id !== entryId));
+    showToast('PTO removed from the local calendar.', 'success');
+  };
+
+  const updateLocalTaskAssignment = (
+    task: LocalAssignmentTask,
+    patch: Partial<LocalAssignmentOverride>,
+  ) => {
+    if (!canManageTaskAssignments) {
       roleDisabledMessage();
       return;
     }
 
-    setCases((currentCases) => currentCases.map((caseItem) => ({
-      ...caseItem,
-      ...getAssignmentRouting(assignmentMethod, caseItem, currentCases, workerName),
-    })));
-    showToast(`Assignment criteria set to ${assignmentMethod}.`, 'success');
+    const nextAssignedTo = patch.assignedTo ?? assignmentTaskOverrides[task.id]?.assignedTo ?? task.assignedTo;
+
+    if (isUserOnPto(nextAssignedTo, task.dueDate, assignmentPtoEntries)) {
+      showToast(`${nextAssignedTo} is on PTO on ${formatDate(task.dueDate)}. Choose an available user.`, 'warning');
+      return;
+    }
+
+    setAssignmentTaskOverrides((current) => ({
+      ...current,
+      [task.id]: {
+        assignedTo: nextAssignedTo,
+        assignedGroup: patch.assignedGroup ?? current[task.id]?.assignedGroup ?? task.assignedGroup,
+      },
+    }));
   };
 
-  const handleAssignmentMethodChange = (method: AssignmentMethod) => {
-    setAssignmentMethod(method);
+  const openTaskAssignmentDialog = (task: LocalAssignmentTask) => {
+    setAssignmentDialogTask(task);
+    setAssignmentDialogEmail(defaultTaskAssignmentEmail);
+    setAssignmentDialogMode(assignmentRoutingMode);
   };
 
-  const previewAssignmentRouting = (caseItem: BenefitCase) => ({
-    ...caseItem,
-    ...getAssignmentRouting(assignmentMethod, caseItem, cases, workerName),
-  });
+  const stageTaskTeamChange = async (
+    task: LocalAssignmentTask,
+    assignedUserEmailInput: string,
+    assignmentMode: AssignmentRoutingMode,
+  ) => {
+    if (!canManageTaskAssignments) {
+      showToast(taskAssignmentDisabledReason || `${role} cannot change task assignments.`, 'warning');
+      return;
+    }
 
-  const assignmentPreviewCases = cases.slice(0, 5).map(previewAssignmentRouting);
+    if (!canUseUiPath) {
+      showToast(taskAssignmentDisabledReason || 'Sign in to UiPath before changing task assignment.', 'warning');
+      return;
+    }
+
+    if (!task.taskId) {
+      showToast(`No live Action Center task ID is loaded for this row yet. Open the case Actions tab, then return to ${assignmentNavLabel}.`, 'warning');
+      return;
+    }
+
+    if (task.isAssignedUserOnPto) {
+      showToast(`${task.assignedTo} is on PTO on ${formatDate(task.dueDate)}. Choose an available user before changing the assignment.`, 'warning');
+      return;
+    }
+
+    const assignedUserEmail = assignedUserEmailInput.trim().toLowerCase();
+
+    if (!assignedUserEmail) {
+      showToast('Enter an assignee email before starting the assignment process.', 'warning');
+      return;
+    }
+
+    setStartingTaskAssignmentId(task.id);
+
+    try {
+      await startTaskAssignmentProcess(sdk, {
+        user: assignedUserEmail,
+        taskId: task.taskId,
+      });
+
+      const assignedUserName = getAssignmentUserDisplayName(assignedUserEmail, assignmentUsers) || assignedUserEmail;
+      setAssignmentTaskOverrides((current) => ({
+        ...current,
+        [task.id]: {
+          assignedTo: assignedUserName,
+          assignedGroup: current[task.id]?.assignedGroup ?? task.assignedGroup,
+        },
+      }));
+      appendAuditEvent(
+        task.caseId,
+        'Task Assignment Changed',
+        `${task.taskName} assigned by ${assignmentMode} to ${assignedUserName} (${assignedUserEmail}).`,
+        'assignment',
+        'Supervisor actions',
+      );
+      showToast(`Assign case worker to a task process started for task ${task.taskId}.`, 'success');
+    } catch (error) {
+      console.warn('Task assignment process start failed.', error);
+      showToast(`Task assignment process start failed: ${getErrorMessage(error)}`, 'error');
+    } finally {
+      setStartingTaskAssignmentId(null);
+    }
+  };
+
+  const openAssignmentTaskCase = (caseItem: BenefitCase) => {
+    if (!cases.some((candidate) => candidate.id === caseItem.id)) {
+      setCases(initialCases);
+    }
+
+    openCase(caseItem, 'Actions');
+  };
+
+  const assignmentSourceCases = cases.length ? cases : initialCases;
+
+  const refreshAssignmentLiveTasks = useCallback(async () => {
+    if (!canUseUiPath || !canManageTaskAssignments) {
+      setAssignmentLiveTasksByCaseId({});
+      setAssignmentLiveTaskStatus('idle');
+      setAssignmentLiveTaskError(null);
+      return;
+    }
+
+    const taskRequests = assignmentSourceCases
+      .map((caseItem) => {
+        const liveRecord = findMatchingLiveRecord(liveRecords, caseItem);
+        const instanceId = getLiveRecordInstanceId(liveRecord)
+          || startedInstanceByCase[caseItem.id]
+          || null;
+
+        if (!instanceId) {
+          return null;
+        }
+
+        return {
+          caseId: caseItem.id,
+          instanceId,
+          references: getLiveRecordActionTaskReferences(liveRecord),
+        };
+      })
+      .filter((request): request is {
+        caseId: string;
+        instanceId: string;
+        references: ReturnType<typeof getLiveRecordActionTaskReferences>;
+      } => Boolean(request));
+
+    if (taskRequests.length === 0) {
+      setAssignmentLiveTasksByCaseId({});
+      setAssignmentLiveTaskStatus('idle');
+      setAssignmentLiveTaskError(null);
+      return;
+    }
+
+    setAssignmentLiveTaskStatus('loading');
+    setAssignmentLiveTaskError(null);
+
+    try {
+      const taskResults = await Promise.all(taskRequests.map(async (request) => {
+        try {
+          const tasks = await findPendingTasksForInstance(
+            sdk,
+            request.instanceId,
+            request.references.instanceIds,
+            request.references.taskIds,
+          );
+
+          return {
+            caseId: request.caseId,
+            tasks,
+            error: null,
+          };
+        } catch (error) {
+          return {
+            caseId: request.caseId,
+            tasks: [],
+            error: getErrorMessage(error),
+          };
+        }
+      }));
+
+      setAssignmentLiveTasksByCaseId(Object.fromEntries(taskResults.map((result) => [result.caseId, result.tasks])));
+      const errors = taskResults.filter((result) => result.error).map((result) => result.error);
+      setAssignmentLiveTaskError(errors.length ? Array.from(new Set(errors)).join(' ') : null);
+      setAssignmentLiveTaskStatus('ready');
+    } catch (error) {
+      const message = getErrorMessage(error);
+      setAssignmentLiveTaskError(message);
+      setAssignmentLiveTaskStatus('error');
+    }
+  }, [
+    assignmentSourceCases,
+    canManageTaskAssignments,
+    canUseUiPath,
+    liveRecords,
+    sdk,
+    startedInstanceByCase,
+  ]);
+
+  const localAssignmentTasks = useMemo(
+    () => buildLocalAssignmentTasks(
+      assignmentSourceCases,
+      assignmentUsers,
+      assignmentTaskOverrides,
+      assignmentPtoEntries,
+      assignmentLiveTasksByCaseId,
+    ),
+    [assignmentSourceCases, assignmentUsers, assignmentTaskOverrides, assignmentPtoEntries, assignmentLiveTasksByCaseId],
+  );
+
+  const filteredAssignmentTasks = useMemo(() => localAssignmentTasks.filter((task) =>
+    (assignmentTaskStatusFilter === 'all' || task.status === assignmentTaskStatusFilter)
+    && (assignmentTaskGroupFilter === 'all' || task.assignedGroup === assignmentTaskGroupFilter)
+  ), [localAssignmentTasks, assignmentTaskStatusFilter, assignmentTaskGroupFilter]);
+
+  const assignmentStatusCounts = useMemo(() => assignmentTaskStatusOptions.reduce<Record<LocalAssignmentTaskStatus | 'all', number>>(
+    (counts, status) => ({
+      ...counts,
+      [status]: status === 'all'
+        ? localAssignmentTasks.length
+        : localAssignmentTasks.filter((task) => task.status === status).length,
+    }),
+    {
+      all: 0,
+      Ready: 0,
+      Queued: 0,
+      Completed: 0,
+    },
+  ), [localAssignmentTasks]);
+
+  const assignmentTaskMetrics = useMemo(() => ({
+    total: assignmentStatusCounts.all,
+    ready: assignmentStatusCounts.Ready,
+    queued: assignmentStatusCounts.Queued,
+    completed: assignmentStatusCounts.Completed,
+    ptoConflicts: localAssignmentTasks.filter((task) => task.isAssignedUserOnPto).length,
+    users: assignmentUsers.length,
+  }), [assignmentStatusCounts, assignmentUsers.length, localAssignmentTasks]);
+
+  const sortedAssignmentPtoEntries = useMemo(
+    () => assignmentPtoEntries.slice().sort((left, right) =>
+      left.startDate.localeCompare(right.startDate) || left.userName.localeCompare(right.userName)
+    ),
+    [assignmentPtoEntries],
+  );
+
+  const assignmentPtoCalendarDays = useMemo(
+    () => buildLocalPtoCalendarDays(assignmentPtoMonth, assignmentPtoEntries),
+    [assignmentPtoEntries, assignmentPtoMonth],
+  );
+
+  const assignmentPtoMetrics = useMemo(() => {
+    const todayIso = dateToIso(today);
+    const userNamesOutThisMonth = new Set(
+      assignmentPtoEntries
+        .filter((entry) => entry.startDate.slice(0, 7) <= assignmentPtoMonth && entry.endDate.slice(0, 7) >= assignmentPtoMonth)
+        .map((entry) => entry.userName),
+    );
+
+    return {
+      entries: assignmentPtoEntries.length,
+      usersOutThisMonth: userNamesOutThisMonth.size,
+      daysScheduled: assignmentPtoEntries.reduce((total, entry) => total + getInclusiveDayCount(entry.startDate, entry.endDate), 0),
+      outToday: assignmentPtoEntries.filter((entry) => entry.startDate <= todayIso && entry.endDate >= todayIso).length,
+    };
+  }, [assignmentPtoEntries, assignmentPtoMonth]);
 
   const filteredCases = useMemo(() => {
     return cases.filter((caseItem) => {
@@ -2605,26 +3318,6 @@ function App() {
   const inboxStartIndex = filteredCases.length ? (currentInboxPage - 1) * inboxPageSize : 0;
   const inboxEndIndex = Math.min(inboxStartIndex + inboxPageSize, filteredCases.length);
   const paginatedCases = filteredCases.slice(inboxStartIndex, inboxEndIndex);
-
-  const metrics = useMemo(() => {
-    const openCases = cases.filter((caseItem) => !['Approved', 'Denied', 'Withdrawn'].includes(caseItem.status));
-    const totalAge = cases.reduce((sum, caseItem) => {
-      const filed = new Date(`${caseItem.filingDate}T12:00:00`);
-      return sum + Math.max(0, Math.ceil((today.getTime() - filed.getTime()) / 86_400_000));
-    }, 0);
-
-    return {
-      totalOpen: openCases.length,
-      pendingReview: cases.filter((caseItem) => caseItem.status === 'Pending Review').length,
-      needingDocuments: cases.filter((caseItem) => caseItem.status === 'Document Review' || caseItem.exception === 'OCR Review').length,
-      dueSoon: cases.filter(isDueSoon).length,
-      supervisorReview: cases.filter((caseItem) => caseItem.exception === 'Supervisor Review').length,
-      completedToday: cases.filter((caseItem) => caseItem.timeline.some((event) => event.timestamp.startsWith('2026-06-04') && event.statusAfter === 'Approved')).length,
-      averageCaseAge: cases.length ? `${Math.round(totalAge / cases.length)} days` : '0 days',
-      missingInfo: cases.filter((caseItem) => caseItem.exception === 'Missing Info').length,
-      clearanceReview: cases.filter((caseItem) => caseItem.status === 'Clearance Review' || caseItem.exception === 'Clearance Match').length,
-    };
-  }, [cases]);
 
   const operationsMetrics = demoOperationsMetrics;
   const groupedMetrics = demoOperationsGroupedMetrics;
@@ -2752,6 +3445,21 @@ function App() {
   }, [refreshLiveTasks]);
 
   useEffect(() => {
+    void refreshAssignmentLiveTasks();
+  }, [refreshAssignmentLiveTasks]);
+
+  useEffect(() => {
+    if (!selectedCase?.id || liveTasks.length === 0) {
+      return;
+    }
+
+    setAssignmentLiveTasksByCaseId((current) => ({
+      ...current,
+      [selectedCase.id]: mergeVisibleLiveTasks(current[selectedCase.id] || [], liveTasks),
+    }));
+  }, [liveTasks, selectedCase?.id]);
+
+  useEffect(() => {
     if (!canUseUiPath || !selectedInstanceId || isTaskEmbedOpen) {
       return undefined;
     }
@@ -2759,10 +3467,11 @@ function App() {
     const intervalId = window.setInterval(() => {
       void refreshLiveRecords();
       void refreshLiveTasks({ preserveVisibleTasks: true });
+      void refreshAssignmentLiveTasks();
     }, 12_000);
 
     return () => window.clearInterval(intervalId);
-  }, [canUseUiPath, selectedInstanceId, isTaskEmbedOpen, refreshLiveRecords, refreshLiveTasks]);
+  }, [canUseUiPath, selectedInstanceId, isTaskEmbedOpen, refreshLiveRecords, refreshLiveTasks, refreshAssignmentLiveTasks]);
 
   const handleStartMaestroCase = async (
     caseItem: BenefitCase = simulatedApplicationCase,
@@ -2944,7 +3653,7 @@ function App() {
     const items = ([
       { id: 'inbox', label: 'Case Inbox' },
       { id: 'operations', label: 'Operations Dashboard' },
-      { id: 'assignment', label: 'Assignment Dashboard' },
+      { id: 'assignment', label: assignmentNavLabel },
       { id: 'settings', label: 'Mock Settings / Role Switcher' },
       { id: 'helpCenter', label: 'Help Center' },
     ] satisfies Array<{ id: Screen; label: string }>).filter((item) => item.id !== 'assignment' || canViewAssignmentDashboard);
@@ -3214,6 +3923,85 @@ function App() {
       </div>
     </div>
   ) : null;
+
+  const TaskAssignmentDialog = () => {
+    if (!assignmentDialogTask) {
+      return null;
+    }
+
+    const task = assignmentDialogTask;
+    const isStartingAssignment = startingTaskAssignmentId === task.id;
+
+    return (
+      <div className="fixed inset-0 z-40 bg-gray-900/50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-lg border border-gray-200 shadow-xl max-w-xl w-full">
+          <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Change Task Assignment</h2>
+              <p className="mt-1 text-sm text-gray-600">{task.caseNumber} / {task.taskName}</p>
+            </div>
+            <button className="text-gray-500 hover:text-gray-900" onClick={() => setAssignmentDialogTask(null)} aria-label="Close assignment dialog">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <div className="space-y-4 p-5 text-sm text-gray-700">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label="Current Assignment" value={task.assignedTo || 'Unassigned'} />
+              <Field label="Task ID" value={task.taskId || 'Not loaded'} />
+            </div>
+
+            <label className="block">
+              <span className="text-sm font-medium text-gray-700">Task assignment choice</span>
+              <select
+                value={assignmentDialogMode}
+                onChange={(event) => setAssignmentDialogMode(event.target.value as AssignmentRoutingMode)}
+                className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
+              >
+                {assignmentRoutingModeOptions.map((mode) => (
+                  <option key={mode} value={mode}>{mode}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="text-sm font-medium text-gray-700">Assign to</span>
+              <select
+                value={assignmentDialogEmail}
+                onChange={(event) => setAssignmentDialogEmail(event.target.value)}
+                className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
+              >
+                {assignmentUsers.map((user) => (
+                  <option key={user.email} value={user.email}>
+                    {user.name} / {user.email} / {user.assignedGroup}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className="px-5 py-4 border-t border-gray-200 flex justify-end gap-3">
+            <ActionButton onClick={() => setAssignmentDialogTask(null)}>Cancel</ActionButton>
+            <ActionButton
+              variant="primary"
+              disabled={isStartingAssignment || !assignmentDialogEmail.trim()}
+              disabledReason={!assignmentDialogEmail.trim() ? 'Enter an assignee email before changing assignment.' : undefined}
+              onClick={() => {
+                const email = assignmentDialogEmail;
+                const mode = assignmentDialogMode;
+                setAssignmentDialogTask(null);
+                void stageTaskTeamChange(task, email, mode);
+              }}
+            >
+              {isStartingAssignment ? 'Starting...' : 'Change Assignment'}
+            </ActionButton>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   const TaskEmbedModal = () => activeTaskEmbed ? (
     <div className="fixed inset-0 z-50 bg-gray-900/70 flex items-center justify-center p-3 sm:p-5">
@@ -3825,61 +4613,546 @@ function App() {
     <div className="space-y-6">
       <DemoBanner />
       <ScreenGuidance context="assignment" />
-      <SectionCard
-        title="Assignment Criteria"
-        actions={<Pill label={assignmentMethod} className="bg-blue-100 text-blue-800 border-blue-200" />}
-      >
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          <label className="block lg:col-span-1">
-            <span className="text-sm font-medium text-gray-700">Assignment Criteria</span>
-            <select
-              value={assignmentMethod}
-              onChange={(event) => handleAssignmentMethodChange(event.target.value as AssignmentMethod)}
-              disabled={!roleCanEdit(role, 'assignment')}
-              className="mt-1 block w-full pl-3 pr-10 py-3 border border-gray-300 bg-white rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-base"
-              aria-label="Assignment Criteria"
-            >
-              {assignmentMethodOptions.map((option) => (
-                <option key={option} value={option}>{option}</option>
-              ))}
-            </select>
-          </label>
 
-          <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:col-span-2">
-            <Field label="Selected Criteria" value={<Pill label={assignmentMethod} />} />
-            <Field label="Open Cases" value={metrics.totalOpen} />
-            <Field label="Live Data Fabric Cases" value={cases.length} />
-            <Field label="Pending Live Actions" value={liveTasks.length} />
+      {canManageTaskAssignments ? (
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          <MetricCard label="Maestro tasks" value={assignmentTaskMetrics.total} tone="blue" />
+          <MetricCard label="Ready tasks" value={assignmentTaskMetrics.ready} tone="green" />
+          <MetricCard label="Queued tasks" value={assignmentTaskMetrics.queued} tone="yellow" />
+          <MetricCard label="Completed tasks" value={assignmentTaskMetrics.completed} tone="gray" />
+          <MetricCard label="PTO conflicts" value={assignmentTaskMetrics.ptoConflicts} tone="orange" />
+          <MetricCard label="Assignable users" value={assignmentTaskMetrics.users} tone="purple" />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          <MetricCard label="PTO entries" value={assignmentPtoMetrics.entries} tone="blue" />
+          <MetricCard label="Users out this month" value={assignmentPtoMetrics.usersOutThisMonth} tone="purple" />
+          <MetricCard label="Scheduled PTO days" value={assignmentPtoMetrics.daysScheduled} tone="green" />
+          <MetricCard label="Out today" value={assignmentPtoMetrics.outToday} tone="orange" />
+        </div>
+      )}
+
+      <div className="border-b border-gray-200">
+        <nav className="-mb-px flex flex-wrap gap-3" aria-label="Assignment subtabs">
+          {visibleAssignmentSubtabs.map((subtab) => {
+            const isActiveSubtab = activeAssignmentSubtab === subtab;
+            return (
+              <button
+                key={subtab}
+                type="button"
+                onClick={() => setActiveAssignmentSubtab(subtab)}
+                className={`border-b-2 px-1 pb-3 text-sm font-semibold ${
+                  isActiveSubtab
+                    ? 'border-blue-600 text-blue-700'
+                    : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                }`}
+              >
+                {subtab}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+
+      {activeAssignmentSubtab === 'Task Assignments' ? (
+        <>
+      <SectionCard
+        title="Maestro Task Assignments"
+        actions={(
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <a
+              href={IES_WORKFLOW_CONFIG.assignmentDataFabric.taskAssignment.entityUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-800 hover:border-blue-300 hover:bg-blue-100"
+            >
+              TaskAssignment Entity
+            </a>
+            <ActionButton onClick={() => {
+              setAssignmentTaskStatusFilter(defaultAssignmentTaskStatusFilter);
+              setAssignmentTaskGroupFilter('all');
+              setAssignmentRoutingMode('User');
+            }}>
+              Reset Filters
+            </ActionButton>
+            <ActionButton
+              disabled={!canUseUiPath || assignmentLiveTaskStatus === 'loading'}
+              disabledReason={uiPathDisabledReason}
+              onClick={() => void refreshAssignmentLiveTasks()}
+            >
+              {assignmentLiveTaskStatus === 'loading' ? 'Refreshing...' : 'Refresh Tasks'}
+            </ActionButton>
+          </div>
+        )}
+      >
+        <div className="mb-5 space-y-4">
+          {assignmentLiveTaskStatus === 'loading' && (
+            <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">
+              Loading live Action Center tasks across Data Fabric cases.
+            </div>
+          )}
+          {assignmentLiveTaskError && (
+            <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+              Unable to load every live assignment task: {assignmentLiveTaskError}
+            </div>
+          )}
+          <div>
+            <span className="text-sm font-medium text-gray-700">Status Filter</span>
+            <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4" role="group" aria-label="Task status filter">
+              {assignmentTaskStatusOptions.map((status) => {
+                const isActiveStatus = assignmentTaskStatusFilter === status;
+                return (
+                  <button
+                    key={status}
+                    type="button"
+                    aria-pressed={isActiveStatus}
+                    onClick={() => setAssignmentTaskStatusFilter(status)}
+                    className={`flex items-center justify-between rounded-md border px-3 py-2 text-sm font-medium transition ${
+                      isActiveStatus
+                        ? 'border-blue-600 bg-blue-50 text-blue-800 shadow-sm'
+                        : 'border-gray-200 bg-white text-gray-700 hover:border-blue-300 hover:bg-blue-50'
+                    }`}
+                  >
+                    <span>{status === 'all' ? 'All' : status}</span>
+                    <span className={`ml-3 rounded-full px-2 py-0.5 text-xs ${
+                      isActiveStatus ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-600'
+                    }`}
+                    >
+                      {assignmentStatusCounts[status]}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+            <label className="block">
+              <span className="text-sm font-medium text-gray-700">Task Status</span>
+              <select
+                value={assignmentTaskStatusFilter}
+                onChange={(event) => setAssignmentTaskStatusFilter(event.target.value as LocalAssignmentTaskStatus | 'all')}
+                className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
+              >
+                {assignmentTaskStatusOptions.map((status) => (
+                  <option key={status} value={status}>{status === 'all' ? 'All statuses' : status}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-sm font-medium text-gray-700">Assigned Team</span>
+              <select
+                value={assignmentTaskGroupFilter}
+                onChange={(event) => setAssignmentTaskGroupFilter(event.target.value)}
+                className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
+              >
+                <option value="all">All teams</option>
+                {assignedGroups.map((group) => (
+                  <option key={group} value={group}>{group}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-sm font-medium text-gray-700">Task assignment choice</span>
+              <select
+                value={assignmentRoutingMode}
+                onChange={(event) => setAssignmentRoutingMode(event.target.value as AssignmentRoutingMode)}
+                className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
+              >
+                {assignmentRoutingModeOptions.map((mode) => (
+                  <option key={mode} value={mode}>{mode}</option>
+                ))}
+              </select>
+            </label>
+            <Field label="Visible Tasks" value={`${filteredAssignmentTasks.length} of ${localAssignmentTasks.length}`} />
+          </div>
+          {assignmentRoutingMode !== 'User' && (
+            <div className="rounded-md border border-yellow-200 bg-yellow-50 px-3 py-2 text-sm text-yellow-800">
+              {assignmentRoutingMode} is shown as a routing choice for the demo. The current process still assigns the task to one email.
+            </div>
+          )}
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200 text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                <th scope="col" className="px-4 py-3 text-left font-semibold text-gray-600">Case</th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold text-gray-600">Task</th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold text-gray-600">Status</th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold text-gray-600">Assigned Team</th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold text-gray-600">Assigned User</th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold text-gray-600">Availability</th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold text-gray-600">Due</th>
+                <th scope="col" className="px-4 py-3 text-right font-semibold text-gray-600">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200 bg-white">
+              {filteredAssignmentTasks.map((task) => {
+                const availableUsers = getAvailableAssignmentUsers(assignmentUsers, task.assignedGroup, task.dueDate, assignmentPtoEntries);
+                const availableUserNames = availableUsers.map((user) => user.name);
+                const shouldShowCurrentAssignee = task.assignedTo !== 'Unassigned' && !availableUserNames.includes(task.assignedTo);
+                const isStartingAssignment = startingTaskAssignmentId === task.id;
+                const assignmentActionDisabledReason = task.status === 'Completed'
+                  ? 'Completed tasks are read-only locally.'
+                  : task.isAssignedUserOnPto
+                    ? 'Choose an available user before changing the assignment.'
+                    : taskAssignmentDisabledReason
+                      || (!task.taskId ? 'Open this case Actions tab to load its live Action Center task ID before starting the process.' : undefined);
+                return (
+                  <tr key={task.id} className="align-top hover:bg-gray-50">
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => {
+                          const caseItem = assignmentSourceCases.find((candidate) => candidate.id === task.caseId);
+                          if (caseItem) {
+                            openAssignmentTaskCase(caseItem);
+                          }
+                        }}
+                        className="font-semibold text-blue-700 hover:text-blue-900 hover:underline"
+                      >
+                        {task.caseNumber}
+                      </button>
+                      <p className="mt-1 text-xs text-gray-500">{task.applicantName}</p>
+                      <p className="mt-1 text-xs text-gray-500">{task.county} / {task.priority}</p>
+                    </td>
+                    <td className="px-4 py-3 min-w-[18rem]">
+                      <p className="font-medium text-gray-900">{task.taskName}</p>
+                      <p className="mt-1 text-xs text-gray-500">{task.process} / {task.appName}</p>
+                      <p className={`mt-1 text-xs ${task.taskId ? 'text-gray-500' : 'text-orange-700'}`}>
+                        Task ID: {task.taskId || 'not loaded'}
+                      </p>
+                      <p className="mt-1 text-xs text-gray-500">{task.lane}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Pill label={task.status} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <select
+                        value={task.assignedGroup}
+                        onChange={(event) => {
+                          const nextGroup = event.target.value;
+                          const nextAvailableUsers = getAvailableAssignmentUsers(assignmentUsers, nextGroup, task.dueDate, assignmentPtoEntries);
+                          updateLocalTaskAssignment(task, {
+                            assignedGroup: nextGroup,
+                            assignedTo: nextAvailableUsers[0]?.name || 'Unassigned',
+                          });
+                        }}
+                        disabled={!canManageTaskAssignments || task.status === 'Completed' || isStartingAssignment}
+                        className="w-44 rounded-md border border-gray-300 bg-white px-2 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
+                        aria-label={`Assigned team for ${task.taskName}`}
+                      >
+                        {assignedGroups.map((group) => (
+                          <option key={group} value={group}>{group}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="px-4 py-3">
+                      <select
+                        value={task.assignedTo}
+                        onChange={(event) => updateLocalTaskAssignment(task, { assignedTo: event.target.value })}
+                        disabled={!canManageTaskAssignments || task.status === 'Completed' || isStartingAssignment}
+                        className="w-48 rounded-md border border-gray-300 bg-white px-2 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
+                        aria-label={`Assigned user for ${task.taskName}`}
+                      >
+                        {task.assignedTo === 'Unassigned' && (
+                          <option value="Unassigned">Unassigned</option>
+                        )}
+                        {shouldShowCurrentAssignee && (
+                          <option value={task.assignedTo}>{task.assignedTo} (PTO conflict)</option>
+                        )}
+                        {availableUsers.map((user) => (
+                          <option key={user.name} value={user.name}>{user.name} ({user.email})</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="px-4 py-3">
+                      {task.isAssignedUserOnPto ? (
+                        <div className="space-y-1">
+                          <Pill label="PTO Conflict" className="border-orange-200 bg-orange-50 text-orange-800" />
+                          <p className="text-xs text-orange-700">Choose another user before changing the team.</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-1">
+                          <Pill label="Available" className="border-green-200 bg-green-50 text-green-800" />
+                          <p className="text-xs text-gray-500">{availableUsers.length} available for due date</p>
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
+                      {formatDate(task.dueDate)}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <ActionButton
+                        disabled={Boolean(assignmentActionDisabledReason) || isStartingAssignment}
+                        disabledReason={assignmentActionDisabledReason}
+                        onClick={() => openTaskAssignmentDialog(task)}
+                      >
+                        {isStartingAssignment ? 'Starting...' : 'Change Assignment'}
+                      </ActionButton>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {filteredAssignmentTasks.length === 0 && (
+          <div className="rounded-lg border border-gray-200 px-6 py-10 text-center text-sm text-gray-500">
+            No Maestro task assignments match the current filters.
+          </div>
+        )}
+      </SectionCard>
+
+      <HelpBox>
+        Supervisors can pick an assignment choice, then confirm the assignee email in the dialog. The current automation always sends one user email to the task assignment process.
+      </HelpBox>
+        </>
+      ) : activeAssignmentSubtab === 'My Team' ? (
+        <>
+      <SectionCard
+        title="My Team"
+        actions={(
+          <ActionButton onClick={() => showToast('Add a new Team Member is a placeholder for the future create-user automation.', 'info')}>
+            Add a new Team Member
+          </ActionButton>
+        )}
+      >
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {assignmentUsers.map((user) => {
+            const activeAssignments = localAssignmentTasks.filter((task) =>
+              task.assignedTo === user.name && task.status !== 'Completed'
+            ).length;
+            const ptoToday = isUserOnPto(user.name, dateToIso(today), assignmentPtoEntries);
+
+            return (
+              <div key={user.email} className="rounded-lg border border-gray-200 bg-white p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-gray-900">{user.name}</p>
+                    <p className="mt-1 text-sm text-gray-600">{user.email}</p>
+                  </div>
+                  <Pill
+                    label={ptoToday ? 'On PTO' : 'Available'}
+                    className={ptoToday ? 'border-orange-200 bg-orange-50 text-orange-800' : 'border-green-200 bg-green-50 text-green-800'}
+                  />
+                </div>
+                <dl className="mt-4 grid grid-cols-1 gap-3">
+                  <Field label="Team" value={user.assignedGroup} />
+                  <Field label="Open Assignments" value={activeAssignments} />
+                </dl>
+              </div>
+            );
+          })}
+        </div>
+      </SectionCard>
+        </>
+      ) : (
+        <>
+      <SectionCard
+        title="PTO Calendar"
+        actions={(
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <a
+              href={IES_WORKFLOW_CONFIG.assignmentDataFabric.workerPto.entityUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-800 hover:border-blue-300 hover:bg-blue-100"
+            >
+              WorkerPTO Entity
+            </a>
+          </div>
+        )}
+      >
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.45fr)]">
+          <div className="space-y-5">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
+              <label className="block">
+                <span className="text-sm font-medium text-gray-700">Calendar Month</span>
+                <input
+                  type="month"
+                  value={assignmentPtoMonth}
+                  onChange={(event) => setAssignmentPtoMonth(event.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium text-gray-700">User</span>
+                <select
+                  value={newPtoUserName}
+                  onChange={(event) => {
+                    const selectedUserName = event.target.value;
+                    const selectedUser = assignmentUsers.find((user) => user.name === selectedUserName);
+                    setNewPtoUserName(selectedUserName);
+                    if (selectedUser) {
+                      setNewPtoWorkerEmail(selectedUser.email);
+                    }
+                  }}
+                  disabled={!canSubmitWorkerPto || isStartingWorkerPto}
+                  className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
+                >
+                  {assignmentUsers.map((user) => (
+                    <option key={user.name} value={user.name}>{user.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium text-gray-700">Worker Email</span>
+                <input
+                  type="email"
+                  value={newPtoWorkerEmail}
+                  onChange={(event) => setNewPtoWorkerEmail(event.target.value)}
+                  disabled={!canSubmitWorkerPto || isStartingWorkerPto}
+                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
+                  placeholder="worker@uipath.com"
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium text-gray-700">Start Date</span>
+                <input
+                  type="date"
+                  value={newPtoStartDate}
+                  onChange={(event) => {
+                    setNewPtoStartDate(event.target.value);
+                    if (newPtoEndDate < event.target.value) {
+                      setNewPtoEndDate(event.target.value);
+                    }
+                  }}
+                  disabled={!canSubmitWorkerPto || isStartingWorkerPto}
+                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium text-gray-700">End Date</span>
+                <input
+                  type="date"
+                  value={newPtoEndDate}
+                  min={newPtoStartDate}
+                  onChange={(event) => setNewPtoEndDate(event.target.value)}
+                  disabled={!canSubmitWorkerPto || isStartingWorkerPto}
+                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium text-gray-700">Reason</span>
+                <input
+                  value={newPtoReason}
+                  onChange={(event) => setNewPtoReason(event.target.value)}
+                  disabled={!canSubmitWorkerPto || isStartingWorkerPto}
+                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
+                  placeholder="PTO"
+                />
+              </label>
+            </div>
+            <ActionButton
+              variant="primary"
+              disabled={!canSubmitWorkerPto || !canUseUiPath || isStartingWorkerPto}
+              disabledReason={workerPtoDisabledReason}
+              onClick={createPtoEntry}
+            >
+              {isStartingWorkerPto ? 'Starting...' : 'Set PTO'}
+            </ActionButton>
+
+            <div className="rounded-lg border border-gray-200">
+              <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((dayName) => (
+                  <div key={dayName} className="px-2 py-2 text-center">{dayName}</div>
+                ))}
+              </div>
+              <div className="grid grid-cols-7">
+                {assignmentPtoCalendarDays.map((day) => (
+                  <div
+                    key={day.date}
+                    className={`min-h-28 border-b border-r border-gray-100 p-2 ${day.isCurrentMonth ? 'bg-white' : 'bg-gray-50 text-gray-400'}`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold">{day.dayOfMonth}</span>
+                      {day.entries.length > 0 && (
+                        <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
+                          {day.entries.length}
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-2 space-y-1">
+                      {day.entries.slice(0, 3).map((entry) => (
+                        <div
+                          key={`${day.date}-${entry.id}`}
+                          className="truncate rounded border border-blue-100 bg-blue-50 px-1.5 py-1 text-[11px] font-medium text-blue-800"
+                          title={`${entry.userName} - ${entry.reason}`}
+                        >
+                          {entry.userName.split(' ')[0]} / {entry.reason}
+                        </div>
+                      ))}
+                      {day.entries.length > 3 && (
+                        <div className="text-[11px] font-medium text-gray-500">+{day.entries.length - 3} more</div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <dl className="grid grid-cols-1 gap-4 self-start rounded-lg border border-gray-200 bg-gray-50 p-4 sm:grid-cols-2 lg:grid-cols-1">
+            <Field label="PTO Entries" value={assignmentPtoMetrics.entries} />
+            <Field label="Users Out This Month" value={assignmentPtoMetrics.usersOutThisMonth} />
+            <Field label="Scheduled PTO Days" value={assignmentPtoMetrics.daysScheduled} />
+            <Field label="Out Today" value={assignmentPtoMetrics.outToday} />
           </dl>
         </div>
       </SectionCard>
 
-      <SectionCard
-        title="Assignment Preview"
-        actions={<ActionButton variant="primary" disabled={!roleCanEdit(role, 'assignment')} disabledReason={editDisabledReason('assignment')} onClick={applyAssignmentCriteria}>Apply Criteria</ActionButton>}
-      >
-        <div className="space-y-3">
-          {assignmentPreviewCases.length ? assignmentPreviewCases.map((caseItem) => (
-            <article key={caseItem.id} className="grid grid-cols-1 gap-3 rounded-lg border border-gray-200 p-4 text-sm md:grid-cols-5 md:items-center">
-              <div className="md:col-span-2 min-w-0">
-                <p className="font-semibold text-gray-900 truncate">{caseItem.mybNumber} - {caseItem.applicantName}</p>
-                <p className="text-xs text-gray-500">{caseItem.county} / {caseItem.region}</p>
-              </div>
-              <Field label="Route" value={caseItem.currentStage} />
-              <Field label="Assigned Group" value={caseItem.assignedGroup} />
-              <Field label="Assigned Worker" value={caseItem.assignedWorker} />
-            </article>
-          )) : (
-            <div className="rounded-lg border border-gray-200 px-6 py-10 text-center text-sm text-gray-500">
-              No live Data Fabric cases are loaded yet.
-            </div>
-          )}
+      <SectionCard title="All PTO Entries">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200 text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                <th scope="col" className="px-4 py-3 text-left font-semibold text-gray-600">User</th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold text-gray-600">Worker Email</th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold text-gray-600">Team</th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold text-gray-600">Dates</th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold text-gray-600">Days</th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold text-gray-600">Reason</th>
+                <th scope="col" className="px-4 py-3 text-right font-semibold text-gray-600">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200 bg-white">
+              {sortedAssignmentPtoEntries.map((entry) => (
+                <tr key={entry.id} className="hover:bg-gray-50">
+                  <td className="px-4 py-3 font-medium text-gray-900">{entry.userName}</td>
+                  <td className="px-4 py-3 text-gray-700">{entry.workerEmail}</td>
+                  <td className="px-4 py-3 text-gray-700">{entry.assignedGroup}</td>
+                  <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{formatDateRange(entry.startDate, entry.endDate)}</td>
+                  <td className="px-4 py-3 text-gray-700">{getInclusiveDayCount(entry.startDate, entry.endDate)}</td>
+                  <td className="px-4 py-3 text-gray-700">{entry.reason}</td>
+                  <td className="px-4 py-3 text-right">
+                    <ActionButton
+                      disabled={!canSubmitWorkerPto || isStartingWorkerPto}
+                      disabledReason={workerPtoDisabledReason}
+                      onClick={() => removePtoEntry(entry.id)}
+                    >
+                      Remove
+                    </ActionButton>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
+
+        {sortedAssignmentPtoEntries.length === 0 && (
+          <div className="rounded-lg border border-gray-200 px-6 py-10 text-center text-sm text-gray-500">
+            No local PTO entries are scheduled.
+          </div>
+        )}
       </SectionCard>
 
       <HelpBox>
-        Assignment criteria are global for this prototype. Applying the criteria updates the current inbox routes locally without opening a specific case.
+        PTO submission starts the Worker PTO process with start date, end date, and worker email. The calendar remains local demo state until WorkerPTO Data Fabric reads are wired in.
       </HelpBox>
+        </>
+      )}
     </div>
   );
 
@@ -4629,6 +5902,32 @@ function App() {
     <div className="space-y-6">
       <DemoBanner />
       <ScreenGuidance context="operations" />
+
+      <div className="border-b border-gray-200">
+        <nav className="-mb-px flex flex-wrap gap-3" aria-label="Operations subtabs">
+          {operationsSubtabOptions.map((subtab) => {
+            const isActiveSubtab = activeOperationsSubtab === subtab;
+
+            return (
+              <button
+                key={subtab}
+                type="button"
+                onClick={() => setActiveOperationsSubtab(subtab)}
+                className={`border-b-2 px-1 pb-3 text-sm font-semibold ${
+                  isActiveSubtab
+                    ? 'border-blue-600 text-blue-700'
+                    : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                }`}
+              >
+                {subtab}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+
+      {activeOperationsSubtab === 'Operations Summary' ? (
+        <>
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-5">
         <MetricCard label="Average case age" value={operationsMetrics.averageCaseAge} tone="gray" detail="Sample data" />
         <MetricCard label="Due soon count" value={operationsMetrics.dueSoon} tone="red" detail="Sample data" />
@@ -4697,6 +5996,37 @@ function App() {
       <HelpBox>
         Operations dashboard metrics use fixed sample data for the demo. Click a county, status bar, or bottleneck to filter the inbox.
       </HelpBox>
+        </>
+      ) : (
+        <>
+      <SectionCard
+        title={IES_WORKFLOW_CONFIG.insightsDashboards.iesSnapDash.name}
+        actions={(
+          <a
+            href={IES_WORKFLOW_CONFIG.insightsDashboards.iesSnapDash.url}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-800 hover:border-blue-300 hover:bg-blue-100"
+          >
+            Open in UiPath Insights
+          </a>
+        )}
+      >
+        <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+          <iframe
+            title={IES_WORKFLOW_CONFIG.insightsDashboards.iesSnapDash.name}
+            src={IES_WORKFLOW_CONFIG.insightsDashboards.iesSnapDash.url}
+            className="h-[72vh] min-h-[44rem] w-full bg-white"
+            allow="fullscreen"
+          />
+        </div>
+      </SectionCard>
+
+      <HelpBox>
+        This tab embeds the UiPath Insights dashboard when the tenant permits framing. Use Open in UiPath Insights if the browser blocks the embedded view.
+      </HelpBox>
+        </>
+      )}
     </div>
   );
 
@@ -4868,8 +6198,10 @@ function App() {
               <select
                 value={role}
                 onChange={(event) => {
-                  setRole(event.target.value as Role);
-                  showToast(`Role switched to ${event.target.value}.`, 'info');
+                  const nextRole = event.target.value as Role;
+                  setRole(nextRole);
+                  setWorkerName(nextRole);
+                  showToast(`User switched to ${nextRole}.`, 'info');
                 }}
                 className="mt-1 block w-full pl-3 pr-10 py-2 border border-gray-300 bg-white rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
               >
@@ -4877,14 +6209,7 @@ function App() {
               </select>
             </label>
 
-            <label className="block">
-              <span className="text-sm font-medium text-gray-700">Current worker name</span>
-              <input
-                value={workerName}
-                onChange={(event) => setWorkerName(event.target.value)}
-                className="mt-1 block w-full pl-3 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              />
-            </label>
+            <Field label="Current user" value={workerName} />
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <label className="block">
@@ -4921,17 +6246,13 @@ function App() {
         <SectionCard title="Role Behavior">
           <div className="space-y-3 text-sm text-gray-700">
             <p><span className="font-medium">Case Worker:</span> can edit most case review fields.</p>
-            <p><span className="font-medium">Document Reviewer:</span> focuses on Documents and Missing Info tabs.</p>
-            <p><span className="font-medium">Eligibility Specialist:</span> focuses on Budget, validations, notices, and final review actions.</p>
-            <p><span className="font-medium">Supervisor:</span> can approve, return, and reassign in local state.</p>
-            <p><span className="font-medium">Auditor:</span> can view but edit actions are disabled.</p>
-            <p><span className="font-medium">Admin / Operations:</span> can view dashboards and reset mock data.</p>
+            <p><span className="font-medium">Supervisor:</span> can review all assignment rows and reassign loaded tasks to the Case Worker.</p>
           </div>
         </SectionCard>
       </div>
 
       <HelpBox>
-        Role switching is intentionally local and not a security model. It changes visible labels and disabled affordances only.
+        User switching is intentionally local and not a security model. This prototype only exposes Case Worker and Supervisor.
       </HelpBox>
     </div>
   );
@@ -5137,6 +6458,7 @@ function App() {
       </main>
       <ToastStack />
       <Modal />
+      <TaskAssignmentDialog />
       <TaskEmbedModal />
       <HelpDrawer />
     </div>

@@ -223,11 +223,7 @@ export interface BenefitCase {
 
 export const roles: Role[] = [
   'Case Worker',
-  'Document Reviewer',
-  'Eligibility Specialist',
   'Supervisor',
-  'Auditor',
-  'Admin / Operations',
 ];
 
 export const statusOptions: CaseStatus[] = [

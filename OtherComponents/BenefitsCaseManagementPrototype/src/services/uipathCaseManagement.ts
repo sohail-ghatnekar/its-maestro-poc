@@ -36,6 +36,18 @@ export type CaseStartInput = {
   email: string;
 };
 
+export type WorkerPtoProcessInput = {
+  endDate_In: string;
+  startDate_In: string;
+  workerEmail_In: string;
+  recordID_In?: string;
+};
+
+export type TaskAssignmentProcessInput = {
+  user: string;
+  taskId: number;
+};
+
 export type LiveTaskSummary = {
   id: number;
   key: string;
@@ -76,6 +88,14 @@ export type StartCaseResult = {
   jobs: ProcessStartResponse[];
   instanceId: string | null;
   input: CaseStartInput;
+};
+
+export type ProcessLaunchResult<TInput> = {
+  jobs: ProcessStartResponse[];
+  input: TInput;
+  releaseId: number;
+  releaseKey: string;
+  processName: string;
 };
 
 export type ApplicationPdfBucketSource = {
@@ -149,6 +169,40 @@ type RuntimeElementExecution = Omit<CaseInstanceExecutionHistoryResponse['elemen
   externalLink?: string | null;
   maestroLink?: string | null;
   elementRuns?: Array<CaseInstanceExecutionHistoryResponse['elementExecutions'][number]['elementRuns'][number] & RuntimeElementRun>;
+};
+
+type MaestroElementRun = RuntimeElementRun & {
+  status?: string | null;
+  startedTimeUtc?: string | null;
+  completedTimeUtc?: string | null;
+  incomingFlowId?: string | null;
+  incomingFlowIds?: string[];
+  elementRunId?: string | null;
+  markerItemIndex?: number | null;
+  version?: number | null;
+  parentElementRunId?: string | null;
+};
+
+type MaestroElementExecution = {
+  completedTimeUtc?: string | null;
+  elementId?: string | null;
+  elementType?: string | null;
+  elementExtensionType?: string | null;
+  parentRunId?: string | null;
+  parentElementId?: string | null;
+  parentElementRunId?: string | null;
+  runId?: string | null;
+  startedTimeUtc?: string | null;
+  status?: string | null;
+  externalLink?: string | null;
+  maestroLink?: string | null;
+  elementRuns?: MaestroElementRun[];
+  jobKey?: string | null;
+};
+
+type MaestroElementExecutionsResponse = {
+  traceId?: string | null;
+  elementExecutions?: MaestroElementExecution[];
 };
 
 type RuntimeTag = {
@@ -724,6 +778,105 @@ function extractStartedJobs(response: unknown): ProcessStartResponse[] {
   return value.map(normalizeStartedJob).filter((job) => job.key || job.id);
 }
 
+type OrchestratorReleaseResponse = {
+  Key?: string;
+  key?: string;
+  ProcessKey?: string;
+  processKey?: string;
+  Name?: string;
+  name?: string;
+};
+
+type ConfiguredProcessLaunch = {
+  releaseId: number;
+  processName: string;
+};
+
+function getOrchestratorODataUrl(path: string): string {
+  return `${IES_WORKFLOW_CONFIG.baseUrl}/${IES_WORKFLOW_CONFIG.orgId}/${IES_WORKFLOW_CONFIG.tenantId}/orchestrator_/odata/${path}`;
+}
+
+function getMaestroPimsApiUrl(path: string): string {
+  return `${IES_WORKFLOW_CONFIG.baseUrl}/${IES_WORKFLOW_CONFIG.orgName}/${IES_WORKFLOW_CONFIG.tenantName}/pims_/api/v1/${path}`;
+}
+
+async function getProcessAuthToken(sdk: UiPath): Promise<string> {
+  const processes = new Processes(sdk);
+
+  return (processes as unknown as { getValidAuthToken: () => Promise<string> }).getValidAuthToken();
+}
+
+async function getMaestroAuthToken(sdk: UiPath): Promise<string> {
+  const instances = new ProcessInstances(sdk);
+
+  return (instances as unknown as { getValidAuthToken: () => Promise<string> }).getValidAuthToken();
+}
+
+async function resolveOrchestratorReleaseKey(token: string, processConfig: ConfiguredProcessLaunch): Promise<string> {
+  const response = await fetch(getOrchestratorODataUrl(`Releases(${processConfig.releaseId})`), {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'X-UIPATH-OrganizationUnitId': String(IES_WORKFLOW_CONFIG.orchestratorFolderId),
+    },
+  });
+
+  if (!response.ok) {
+    const details = await response.text().catch(() => '');
+    throw new Error(`Release lookup failed for ${processConfig.processName} (${response.status}): ${details || response.statusText}`);
+  }
+
+  const release = await response.json().catch(() => null) as OrchestratorReleaseResponse | null;
+  const releaseKey = release?.Key || release?.key || release?.ProcessKey || release?.processKey;
+
+  if (!releaseKey) {
+    throw new Error(`Release ${processConfig.releaseId} for ${processConfig.processName} did not return a ReleaseKey.`);
+  }
+
+  return releaseKey;
+}
+
+async function startConfiguredOrchestratorProcess<TInput extends object>(
+  sdk: UiPath,
+  processConfig: ConfiguredProcessLaunch,
+  input: TInput,
+): Promise<ProcessLaunchResult<TInput>> {
+  const token = await getProcessAuthToken(sdk);
+  const releaseKey = await resolveOrchestratorReleaseKey(token, processConfig);
+  const response = await fetch(getOrchestratorODataUrl('Jobs/UiPath.Server.Configuration.OData.StartJobs'), {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'X-UIPATH-OrganizationUnitId': String(IES_WORKFLOW_CONFIG.orchestratorFolderId),
+    },
+    body: JSON.stringify({
+      startInfo: {
+        ReleaseKey: releaseKey,
+        Strategy: StartStrategy.ModernJobsCount,
+        JobsCount: 1,
+        RunAsMe: true,
+        JobPriority: JobPriority.Normal,
+        InputArguments: JSON.stringify(input),
+        RequiresUserInteraction: false,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const details = await response.text().catch(() => '');
+    throw new Error(`${processConfig.processName} StartJobs failed (${response.status}): ${details || response.statusText}`);
+  }
+
+  return {
+    jobs: extractStartedJobs(await response.json()),
+    input,
+    releaseId: processConfig.releaseId,
+    releaseKey,
+    processName: processConfig.processName,
+  };
+}
+
 function extractIntegrationServiceRecords(response: unknown): LiveCaseRecord[] {
   if (Array.isArray(response)) {
     return response as LiveCaseRecord[];
@@ -898,10 +1051,9 @@ export async function fetchApplicationPdfFromBucket(sdk: UiPath): Promise<Applic
 }
 
 async function startMaestroCaseWithRestFallback(sdk: UiPath, input: CaseStartInput): Promise<ProcessStartResponse[]> {
-  const processes = new Processes(sdk);
-  const token = await (processes as unknown as { getValidAuthToken: () => Promise<string> }).getValidAuthToken();
+  const token = await getProcessAuthToken(sdk);
   const response = await fetch(
-    `${IES_WORKFLOW_CONFIG.baseUrl}/${IES_WORKFLOW_CONFIG.orgId}/${IES_WORKFLOW_CONFIG.tenantId}/orchestrator_/odata/Jobs/UiPath.Server.Configuration.OData.StartJobs`,
+    getOrchestratorODataUrl('Jobs/UiPath.Server.Configuration.OData.StartJobs'),
     {
       method: 'POST',
       headers: {
@@ -1023,6 +1175,20 @@ export async function startMaestroCase(sdk: UiPath, caseItem: BenefitCase): Prom
     instanceId,
     input,
   };
+}
+
+export async function startWorkerPtoProcess(
+  sdk: UiPath,
+  input: WorkerPtoProcessInput,
+): Promise<ProcessLaunchResult<WorkerPtoProcessInput>> {
+  return startConfiguredOrchestratorProcess(sdk, IES_WORKFLOW_CONFIG.assignmentProcesses.workerPto, input);
+}
+
+export async function startTaskAssignmentProcess(
+  sdk: UiPath,
+  input: TaskAssignmentProcessInput,
+): Promise<ProcessLaunchResult<TaskAssignmentProcessInput>> {
+  return startConfiguredOrchestratorProcess(sdk, IES_WORKFLOW_CONFIG.assignmentProcesses.taskAssignment, input);
 }
 
 async function fetchLiveCaseRecordsFromEntity(sdk: UiPath): Promise<LiveCaseRecord[]> {
@@ -1186,6 +1352,101 @@ export function getLiveRecordActionTaskReferences(record: LiveCaseRecord | null)
   };
 }
 
+function normalizeUtcTimestamp(value: string | null | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+
+  return value.endsWith('Z') || /[+-]\d\d:\d\d$/.test(value) ? value : `${value}Z`;
+}
+
+function getElementExecutionRun(execution: MaestroElementExecution): MaestroElementRun | null {
+  if (!Array.isArray(execution.elementRuns) || execution.elementRuns.length === 0) {
+    return null;
+  }
+
+  return execution.elementRuns[0] || null;
+}
+
+function mapElementExecutionToHistoryItem(
+  execution: MaestroElementExecution,
+  traceId: string | null | undefined,
+): ProcessInstanceExecutionHistoryResponse {
+  const run = getElementExecutionRun(execution);
+  const elementId = execution.elementId || '';
+  const elementRunId = run?.elementRunId || execution.runId || `${elementId}-${execution.startedTimeUtc || Date.now()}`;
+  const startedTime = normalizeUtcTimestamp(execution.startedTimeUtc || run?.startedTimeUtc);
+  const completedTime = normalizeUtcTimestamp(execution.completedTimeUtc || run?.completedTimeUtc);
+  const updatedTime = completedTime || startedTime || new Date().toISOString();
+  const attributes = {
+    elementId,
+    elementType: execution.elementType || null,
+    elementExtensionType: execution.elementExtensionType || null,
+    status: execution.status || run?.status || null,
+    runId: execution.runId || null,
+    elementRunId,
+    workflowId: run?.workflowId || null,
+    temporalExecutionId: run?.temporalExecutionId || null,
+    jobKey: execution.jobKey || run?.jobKey || null,
+    externalLink: execution.externalLink || null,
+    maestroLink: execution.maestroLink || null,
+  };
+
+  return {
+    id: elementRunId,
+    traceId: traceId || run?.temporalExecutionId || elementRunId,
+    parentId: execution.parentElementRunId || run?.parentElementRunId || execution.parentRunId || null,
+    name: '',
+    startedTime: startedTime || updatedTime,
+    endTime: completedTime,
+    attributes: JSON.stringify(attributes),
+    createdTime: startedTime || updatedTime,
+    updatedTime,
+    expiredTime: null,
+  };
+}
+
+async function fetchMaestroElementExecutionHistory(
+  sdk: UiPath,
+  instanceId: string,
+  folderKey: string,
+): Promise<ProcessInstanceExecutionHistoryResponse[]> {
+  const token = await getMaestroAuthToken(sdk);
+  const response = await fetch(getMaestroPimsApiUrl(`instances/${instanceId}/element-executions`), {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'X-UIPATH-FolderKey': folderKey,
+    },
+  });
+
+  if (!response.ok) {
+    const details = await response.text().catch(() => '');
+    throw new Error(`Maestro element executions failed (${response.status}): ${details || response.statusText}`);
+  }
+
+  const body = await response.json().catch(() => null) as MaestroElementExecutionsResponse | null;
+
+  if (!Array.isArray(body?.elementExecutions)) {
+    return [];
+  }
+
+  return body.elementExecutions.map((execution) => mapElementExecutionToHistoryItem(execution, body.traceId));
+}
+
+async function fetchMaestroExecutionHistory(
+  sdk: UiPath,
+  instances: ProcessInstances,
+  instanceId: string,
+  folderKey: string,
+): Promise<ProcessInstanceExecutionHistoryResponse[]> {
+  try {
+    return await fetchMaestroElementExecutionHistory(sdk, instanceId, folderKey);
+  } catch {
+    return instances.getExecutionHistory(instanceId).catch(() => []);
+  }
+}
+
 export async function fetchMaestroInstanceContext(
   sdk: UiPath,
   instanceId: string,
@@ -1196,7 +1457,7 @@ export async function fetchMaestroInstanceContext(
   const [instance, variables, executionHistory] = await Promise.all([
     instances.getById(instanceId, folderKey).catch(() => null),
     instances.getVariables(instanceId, folderKey).catch(() => null),
-    instances.getExecutionHistory(instanceId).catch(() => []),
+    fetchMaestroExecutionHistory(sdk, instances, instanceId, folderKey),
   ]);
 
   return {
@@ -1216,7 +1477,7 @@ export async function fetchMaestroInstanceDiagram(
   const [instance, bpmnXml, executionHistory, incidents] = await Promise.all([
     instances.getById(instanceId, folderKey).catch(() => null),
     instances.getBpmn(instanceId, folderKey),
-    instances.getExecutionHistory(instanceId).catch(() => []),
+    fetchMaestroExecutionHistory(sdk, instances, instanceId, folderKey),
     instances.getIncidents(instanceId, folderKey).catch(() => []),
   ]);
 
@@ -1373,23 +1634,17 @@ export async function findPendingTasksForInstance(
   knownTaskIds: number[] = [],
 ): Promise<LiveTaskSummary[]> {
   const caseInstances = new CaseInstances(sdk);
+  const tasks = new Tasks(sdk);
 
   const caseTasks = await caseInstances.getActionTasks(instanceId, { pageSize: 50 })
     .then((response) => getPendingTasks(extractItems(response)))
     .catch(() => []);
 
-  if (caseTasks.length > 0) {
-    return normalizeTaskResults(await enrichTasks(new Tasks(sdk), caseTasks));
-  }
-
-  const tasks = new Tasks(sdk);
-  const recordTaskMatches = await findPendingTasksByIds(tasks, knownTaskIds);
-
-  if (recordTaskMatches.length > 0) {
-    return normalizeTaskResults(recordTaskMatches);
-  }
-
-  const childInstanceIds = await fetchChildInstanceIds(sdk, instanceId);
+  const [enrichedCaseTasks, recordTaskMatches, childInstanceIds] = await Promise.all([
+    caseTasks.length > 0 ? enrichTasks(tasks, caseTasks) : Promise.resolve([]),
+    findPendingTasksByIds(tasks, knownTaskIds),
+    fetchChildInstanceIds(sdk, instanceId),
+  ]);
   const relatedInstanceIds = uniqueStrings([instanceId, ...knownRelatedInstanceIds, ...childInstanceIds]);
   const folderTasks = await findPendingFolderTasks(tasks);
   const enrichedTasks = await enrichTasks(tasks, folderTasks);
@@ -1397,11 +1652,11 @@ export async function findPendingTasksForInstance(
     .filter((task) => taskBelongsToAnyInstance(task, relatedInstanceIds))
     .sort((left, right) => Date.parse(right.createdTime) - Date.parse(left.createdTime));
 
-  if (instanceTasks.length > 0) {
-    return normalizeTaskResults(instanceTasks);
-  }
-
-  return [];
+  return normalizeTaskResults([
+    ...enrichedCaseTasks,
+    ...recordTaskMatches,
+    ...instanceTasks,
+  ]);
 }
 
 export async function completeLiveTask(sdk: UiPath, task: LiveTaskSummary) {

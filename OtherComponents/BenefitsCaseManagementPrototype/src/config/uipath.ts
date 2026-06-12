@@ -57,6 +57,12 @@ export const IES_WORKFLOW_CONFIG = {
   baseUrl: 'https://staging.api.uipath.com',
   portalBaseUrl: 'https://staging.uipath.com',
   deployedAppUrl: 'https://uipathlabs.staging.uipath.host/ies-case-management-poc',
+  insightsDashboards: {
+    iesSnapDash: {
+      name: 'IES SNAP Dash',
+      url: 'https://staging.uipath.com/uipathlabs/playground/insights_/dashboard/15306',
+    },
+  },
   orchestratorFolderId: 3056236,
   orchestratorFolderName: 'AMER Presales/Public Sector/IES Maestro/IES - Maestro POC',
   applicationPdfBucket: {
@@ -103,6 +109,34 @@ export const IES_WORKFLOW_CONFIG = {
   maestroProcessKey: '1b76b12d-a9ec-46d8-9842-7388c6e26ec5',
   maestroFolderKey: 'cc66160f-99dd-456a-83eb-a66114a74251',
   dataFabricEntityId: 'efc6ed21-ea59-f111-8fcb-000d3a45fabb',
+  assignmentDataFabric: {
+    taskAssignment: {
+      entityId: 'fa33af77-0266-f111-8fcb-000d3ab1a7ac',
+      entityUrl: 'https://staging.uipath.com/uipathlabs/Playground/datafabric_/entities/fa33af77-0266-f111-8fcb-000d3ab1a7ac',
+      fields: ['User', 'TaskId', 'MaestroProcessId'],
+    },
+    workerPto: {
+      entityId: 'f351523b-0266-f111-8fcb-000d3ab1a7ac',
+      entityUrl: 'https://staging.uipath.com/uipathlabs/Playground/datafabric_/entities/f351523b-0266-f111-8fcb-000d3ab1a7ac',
+      fields: ['User', 'StartDate', 'EndDate'],
+    },
+  },
+  assignmentProcesses: {
+    workerPto: {
+      releaseId: 2190576,
+      processName: 'Worker PTO',
+      editUrl: 'https://staging.uipath.com/82e69757-09ff-4e6d-83e7-d530f2ac4e7b/bd829329-42ff-40aa-96dc-95a78168275a/orchestrator_/processes/2190576/edit?tid=555693&fid=3056236',
+      startUrl: 'https://staging.uipath.com/82e69757-09ff-4e6d-83e7-d530f2ac4e7b/bd829329-42ff-40aa-96dc-95a78168275a/orchestrator_/processes/2190576/jobs/start?tid=555693&fid=3056236',
+      inputFields: ['endDate_In', 'startDate_In', 'workerEmail_In', 'recordID_In'],
+    },
+    taskAssignment: {
+      releaseId: 2190577,
+      processName: 'Task Assignment',
+      editUrl: 'https://staging.uipath.com/82e69757-09ff-4e6d-83e7-d530f2ac4e7b/bd829329-42ff-40aa-96dc-95a78168275a/orchestrator_/processes/2190577/edit?tid=555693&fid=3056236',
+      startUrl: 'https://staging.uipath.com/82e69757-09ff-4e6d-83e7-d530f2ac4e7b/bd829329-42ff-40aa-96dc-95a78168275a/orchestrator_/processes/2190577/jobs/start?tid=555693&fid=3056236',
+      inputFields: ['user', 'taskId'],
+    },
+  },
   dataFabricConnectionId: readValue(
     import.meta.env.VITE_UIPATH_DATA_FABRIC_CONNECTION_ID,
     '29ab41f0-e65a-43f2-83b4-fd2501ae10c7',
