@@ -1,9 +1,9 @@
 {
   "name": "ies-case-management-poc",
   "displayName": "ies-case-management-poc",
-  "version": "1.0.20260612.1",
-  "description": "Benefits case management dashboard",
+  "version": "1.0.20260612.2",
+  "description": "IES case management dashboard",
   "author": "Sohail Ghatnekar",
   "contentType": "webapp",
-  "createdAt": "2026-06-12T15:49:49.040Z"
+  "createdAt": "2026-06-12T16:42:41.349Z"
 }
