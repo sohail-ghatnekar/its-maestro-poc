@@ -3,7 +3,7 @@ import { Processes, JobPriority, StartStrategy } from '@uipath/uipath-typescript
 import { CaseInstances } from '@uipath/uipath-typescript/cases';
 import type { CaseInstanceExecutionHistoryResponse } from '@uipath/uipath-typescript/cases';
 import { ProcessInstances } from '@uipath/uipath-typescript/maestro-processes';
-import { Tasks, TaskStatus, TaskType } from '@uipath/uipath-typescript/tasks';
+import { Tasks, TaskType } from '@uipath/uipath-typescript/tasks';
 import { Buckets } from '@uipath/uipath-typescript/buckets';
 import type {
   EntityRecord,
@@ -682,8 +682,10 @@ export function inferActionAppDefinition(task: TaskGetResponse): ActionAppDefini
   const searchText = getTaskSearchText(task);
   const scoredDefinitions = ACTION_APP_DEFINITIONS
     .map((definition) => {
-      const appIdMatch = definition.appId && searchText.includes(definition.appId.toLowerCase()) ? 1 : 0;
-      const nameMatch = searchText.includes(definition.name.toLowerCase()) ? 20 : 0;
+      const appIdMatch = definition.appId && searchText.includes(definition.appId.toLowerCase()) ? 120 : 0;
+      const nameMatch = searchText.includes(definition.name.toLowerCase()) ? 40 : 0;
+      const appNameMatch = searchText.includes(definition.appName.toLowerCase()) ? 12 : 0;
+      const processMatch = searchText.includes(definition.process.toLowerCase()) ? 4 : 0;
       const keywordScore = definition.keywords.reduce((score, keyword) => {
         const normalizedKeyword = keyword.toLowerCase();
 
@@ -696,7 +698,7 @@ export function inferActionAppDefinition(task: TaskGetResponse): ActionAppDefini
 
       return {
         definition,
-        score: appIdMatch + nameMatch + keywordScore,
+        score: appIdMatch + nameMatch + appNameMatch + processMatch + keywordScore,
       };
     })
     .filter((result) => result.score > 0)
@@ -728,13 +730,8 @@ function normalizeTask(task: TaskGetResponse): LiveTaskSummary {
   };
 }
 
-function getPendingTasks(tasks: TaskGetResponse[]): TaskGetResponse[] {
-  return tasks.filter((task) =>
-    !task.isCompleted
-    && !task.completedTime
-    && task.status !== TaskStatus.Completed
-    && !task.isDeleted
-  );
+function getVisibleTasks(tasks: TaskGetResponse[]): TaskGetResponse[] {
+  return tasks.filter((task) => !task.isDeleted);
 }
 
 function formatErrorMessage(error: unknown): string {
@@ -1117,7 +1114,10 @@ async function resolveStartedMaestroInstanceId(sdk: UiPath, jobs: ProcessStartRe
   return matchedInstance?.instanceId || candidateIds[0] || null;
 }
 
-export function buildCaseStartInput(caseItem: BenefitCase): CaseStartInput {
+export function buildCaseStartInput(
+  caseItem: BenefitCase,
+  applicantEmail = IES_WORKFLOW_CONFIG.defaultApplicantEmail,
+): CaseStartInput {
   const rawCase = caseItem.mybNumber === 'MYB-1004'
     ? {
       sourceSystem: 'BenefitsApp',
@@ -1125,6 +1125,7 @@ export function buildCaseStartInput(caseItem: BenefitCase): CaseStartInput {
       applicationDocumentUri: 'mock://documents/MYB-1004/Fake_SNAP_App_Completed.pdf',
       receivedDateTimeUtc: '2026-05-26T14:00:00Z',
       demoScenario: 'Completed SNAP application PDF extraction',
+      applicantEmail,
     }
     : {
       sourceSystem: 'BenefitsApp',
@@ -1132,21 +1133,26 @@ export function buildCaseStartInput(caseItem: BenefitCase): CaseStartInput {
       applicationDocumentUri: `mock://documents/${caseItem.mybNumber}/${caseItem.mybNumber}_Application.pdf`,
       receivedDateTimeUtc: `${caseItem.filingDate}T14:00:00Z`,
       demoScenario: caseItem.description,
+      applicantEmail,
     };
 
   return {
     caseIn: {
-      ApplicantEmail: IES_WORKFLOW_CONFIG.defaultApplicantEmail,
+      ApplicantEmail: applicantEmail,
       ApplicantName: caseItem.mybNumber === 'MYB-1004' ? 'Michael M. Motorist' : caseItem.applicantName,
       myBNumber: caseItem.mybNumber,
       RawCaseJSON: JSON.stringify(rawCase),
     },
-    email: IES_WORKFLOW_CONFIG.defaultApplicantEmail,
+    email: applicantEmail,
   };
 }
 
-export async function startMaestroCase(sdk: UiPath, caseItem: BenefitCase): Promise<StartCaseResult> {
-  const input = buildCaseStartInput(caseItem);
+export async function startMaestroCase(
+  sdk: UiPath,
+  caseItem: BenefitCase,
+  applicantEmail = IES_WORKFLOW_CONFIG.defaultApplicantEmail,
+): Promise<StartCaseResult> {
+  const input = buildCaseStartInput(caseItem, applicantEmail);
   const processes = new Processes(sdk);
   let jobs: ProcessStartResponse[];
 
@@ -1526,7 +1532,7 @@ function uniqueStrings(values: string[]): string[] {
 }
 
 function normalizeTaskResults(tasks: TaskGetResponse[]): LiveTaskSummary[] {
-  return sortTasksNewestFirst(uniqueTasks(getPendingTasks(tasks))).map(normalizeTask);
+  return sortTasksNewestFirst(uniqueTasks(getVisibleTasks(tasks))).map(normalizeTask);
 }
 
 async function enrichTasks(tasks: Tasks, taskSummaries: TaskGetResponse[]): Promise<TaskGetResponse[]> {
@@ -1600,15 +1606,15 @@ async function findPendingTasksByIds(tasks: Tasks, taskIds: number[]): Promise<T
     )
   );
 
-  return getPendingTasks(taskResults.filter((task): task is TaskGetResponse => Boolean(task)));
+  return getVisibleTasks(taskResults.filter((task): task is TaskGetResponse => Boolean(task)));
 }
 
 async function findPendingFolderTasks(tasks: Tasks): Promise<TaskGetResponse[]> {
   const queryOptions = [
-    { asTaskAdmin: true, filter: "Status ne 'Completed' and IsDeleted eq false" },
     { asTaskAdmin: true },
-    { asTaskAdmin: false, filter: "Status ne 'Completed' and IsDeleted eq false" },
     { asTaskAdmin: false },
+    { asTaskAdmin: true, filter: "Status ne 'Completed' and IsDeleted eq false" },
+    { asTaskAdmin: false, filter: "Status ne 'Completed' and IsDeleted eq false" },
   ];
 
   for (const options of queryOptions) {
@@ -1617,7 +1623,7 @@ async function findPendingFolderTasks(tasks: Tasks): Promise<TaskGetResponse[]> 
       ...options,
       expand: 'AssignedToUser,Activities',
       pageSize: 500,
-    }).then((response) => getPendingTasks(extractItems(response))).catch(() => []);
+    }).then((response) => getVisibleTasks(extractItems(response))).catch(() => []);
 
     if (result.length > 0) {
       return result;
@@ -1637,7 +1643,7 @@ export async function findPendingTasksForInstance(
   const tasks = new Tasks(sdk);
 
   const caseTasks = await caseInstances.getActionTasks(instanceId, { pageSize: 50 })
-    .then((response) => getPendingTasks(extractItems(response)))
+    .then((response) => getVisibleTasks(extractItems(response)))
     .catch(() => []);
 
   const [enrichedCaseTasks, recordTaskMatches, childInstanceIds] = await Promise.all([
@@ -1648,7 +1654,7 @@ export async function findPendingTasksForInstance(
   const relatedInstanceIds = uniqueStrings([instanceId, ...knownRelatedInstanceIds, ...childInstanceIds]);
   const folderTasks = await findPendingFolderTasks(tasks);
   const enrichedTasks = await enrichTasks(tasks, folderTasks);
-  const instanceTasks = getPendingTasks(enrichedTasks)
+  const instanceTasks = getVisibleTasks(enrichedTasks)
     .filter((task) => taskBelongsToAnyInstance(task, relatedInstanceIds))
     .sort((left, right) => Date.parse(right.createdTime) - Date.parse(left.createdTime));
 

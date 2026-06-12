@@ -311,7 +311,7 @@ export const helpContent: Record<HelpContextId, HelpContent> = {
       { term: 'Budget', definition: 'Eligibility calculation surfaced after the Maestro budget step.' },
       { term: 'Benefit Amount', definition: 'Monthly value calculated by the budget step.' },
     ],
-    relatedActions: ['Create Budget', 'Review Budget Results', 'Mark Budget Reviewed'],
+    relatedActions: ['Create Budget', 'Review Budget Task', 'Mark Budget Reviewed'],
     externalReferences: commonReferences,
   },
   notices: {
@@ -374,12 +374,12 @@ export const helpContent: Record<HelpContextId, HelpContent> = {
     screenId: 'operations',
     category: 'Dashboard & Metrics',
     title: 'Operations Dashboard Help',
-    summary: 'Use the dashboard to present fixed sample workload health plus the embedded UiPath Insights IES SNAP Dash.',
+    summary: 'Use the dashboard to present fixed sample workload health plus the UiPath Insights IES SNAP Dash.',
     workerGuidance: [
       'Click counties or bottlenecks to filter the inbox.',
       'Review the sample due-soon and review counts before reassigning work.',
       'Use these made-up metrics as demo signals only.',
-      'Open IES SNAP Dash to show the UiPath Insights dashboard in the same operations area.',
+      'Open IES SNAP Dash in UiPath Insights.',
     ],
     checklist: ['Review workload cards.', 'Compare county/region bottlenecks.', 'Open IES SNAP Dash.', 'Click a bottleneck to filter inbox.', 'Reset filters when done.'],
     keyTerms: [

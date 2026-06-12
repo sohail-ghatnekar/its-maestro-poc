@@ -140,7 +140,7 @@ export interface NoticeRecord {
   reasonCode: string;
   requiresText: boolean;
   dynamicText: string;
-  status: 'Draft' | 'Preview Generated' | 'Approved' | 'Sent' | 'Printed';
+  status: 'Draft' | 'Preview Generated' | 'Approved' | 'Sent' | 'Printed' | 'Completed';
 }
 
 export interface TimelineEvent {

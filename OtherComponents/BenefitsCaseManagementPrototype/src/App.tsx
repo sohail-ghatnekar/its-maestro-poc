@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent, ReactNode } from 'react';
 import { MaestroInstanceDiagram } from './components/MaestroInstanceDiagram';
 import {
@@ -149,6 +149,8 @@ interface Filters {
 }
 
 type LocalAssignmentTaskStatus = 'Ready' | 'Queued' | 'Completed';
+type AssignmentTaskStatusFilter = LocalAssignmentTaskStatus | 'all' | 'open';
+type LiveTaskStatusFilter = 'all' | 'open' | 'completed';
 type AssignmentSubtab = 'Task Assignments' | 'PTO Calendar' | 'My Team';
 type AssignmentRoutingMode = 'User' | 'Workload based' | 'All users of group' | 'Round robin';
 
@@ -236,14 +238,21 @@ const defaultAssignmentUsers: LocalAssignmentUser[] = [
   },
 ];
 
-const assignmentTaskStatusOptions: Array<LocalAssignmentTaskStatus | 'all'> = [
+const assignmentTaskStatusOptions: AssignmentTaskStatusFilter[] = [
   'all',
+  'open',
   'Ready',
   'Queued',
   'Completed',
 ];
 
-const defaultAssignmentTaskStatusFilter: LocalAssignmentTaskStatus | 'all' = 'Ready';
+const defaultAssignmentTaskStatusFilter: AssignmentTaskStatusFilter = 'Ready';
+const liveTaskStatusFilterOptions: LiveTaskStatusFilter[] = ['all', 'open', 'completed'];
+const liveTaskStatusFilterLabels: Record<LiveTaskStatusFilter, string> = {
+  all: 'All',
+  open: 'Open',
+  completed: 'Completed',
+};
 
 const operationsSubtabOptions: OperationsSubtab[] = ['Operations Summary', 'IES SNAP Dash'];
 const assignmentSubtabOptions: AssignmentSubtab[] = ['Task Assignments', 'PTO Calendar', 'My Team'];
@@ -256,6 +265,10 @@ const assignmentRoutingModeOptions: AssignmentRoutingMode[] = [
 ];
 
 const defaultTaskAssignmentEmail = 'sohail.ghatnekar@uipath.com';
+const simulatedApplicationEmailOptions = [
+  'jamaal.chaney@uipath.com',
+  'sohail.ghatnekar@uipath.com',
+];
 
 const defaultAssignmentPtoEntries: LocalPtoEntry[] = [
   {
@@ -401,12 +414,18 @@ const liveActionTabByDetailTab: Partial<Record<DetailTab, LiveActionAppTab>> = {
   Budget: 'Budget',
 };
 
-const subprocessTabByChecklistLabel: Partial<Record<string, LiveActionAppTab>> = {
-  'Interview complete': 'Interview / Missing Info',
-  'Documents reviewed': 'Documents',
-  'Clearance reviewed': 'Clearance',
-  'External validations reviewed': 'External Validation',
+const summaryChecklistTaskDefinitionIds: Partial<Record<string, string[]>> = {
+  'Interview complete': ['cp1-3-conduct-interview', 'cp1-6-complete-interview'],
+  'Documents reviewed': ['cp2-4-review-low-confidence-document', 'cp2-5-mark-document-verified'],
+  'Clearance reviewed': ['cp3-5-assign-request-new-cin', 'cp3-6-capture-override-reason'],
+  'External validations reviewed': ['cp4-5-review-discrepancy'],
+  'Budget reviewed': ['main-review-budget-results'],
+  'Notice prepared': ['main-worker-final-review', 'main-supervisor-review'],
 };
+
+const budgetTaskDefinitionIds = ['main-review-budget-results'];
+const clearanceTaskDefinitionIds = ['cp3-5-assign-request-new-cin', 'cp3-6-capture-override-reason'];
+const finalReviewTaskDefinitionIds = ['main-worker-final-review', 'main-supervisor-review'];
 
 const summaryChecklistRows = [
   { sourceLabel: 'Application reviewed', label: 'Application reviewed' },
@@ -1626,6 +1645,10 @@ function checklistItemIsCompleted(caseItem: BenefitCase, label: string): boolean
   return getChecklistDisplayStatus(item.status) === 'Completed';
 }
 
+function getChecklistStatusByLabel(caseItem: BenefitCase, label: string): ChecklistStatus | null {
+  return caseItem.checklist.find((checklistItem) => checklistItem.label === label)?.status || null;
+}
+
 function getCaseStageOrder(caseItem: BenefitCase): number | null {
   const normalizedStage = caseItem.currentStage.trim().toLowerCase();
 
@@ -1640,6 +1663,182 @@ function caseHasMovedPastStage(caseItem: BenefitCase, stageOrder: number): boole
   }
 
   return ['Ready for Budget', 'Approved', 'Denied', 'Withdrawn'].includes(caseItem.status);
+}
+
+function getStageProgressStatus(caseItem: BenefitCase, stageOrder: number): ChecklistStatus | null {
+  const currentStageOrder = getCaseStageOrder(caseItem);
+
+  if (currentStageOrder !== null) {
+    if (currentStageOrder > stageOrder) {
+      return 'Completed';
+    }
+
+    if (currentStageOrder === stageOrder) {
+      return 'In Progress';
+    }
+  }
+
+  if (['Approved', 'Denied', 'Withdrawn'].includes(caseItem.status)) {
+    return 'Completed';
+  }
+
+  if (caseItem.status === 'Ready for Budget') {
+    return stageOrder < 6 ? 'Completed' : stageOrder === 6 ? 'In Progress' : null;
+  }
+
+  return null;
+}
+
+function toProgressChecklistStatus(status: ChecklistStatus | null | undefined): ChecklistStatus {
+  const displayStatus = status ? getChecklistDisplayStatus(status) : 'Not Started';
+
+  if (displayStatus === 'Completed') {
+    return 'Completed';
+  }
+
+  if (displayStatus === 'Not Started') {
+    return 'Not Started';
+  }
+
+  return 'In Progress';
+}
+
+function getTasksForDefinitions(tasks: LiveTaskSummary[], definitionIds: string[]): LiveTaskSummary[] {
+  const definitionIdSet = new Set(definitionIds);
+
+  return tasks.filter((task) => task.appDefinition?.id && definitionIdSet.has(task.appDefinition.id));
+}
+
+function getTaskDefinitionProgressStatus(tasks: LiveTaskSummary[], definitionIds: string[]): ChecklistStatus | null {
+  const matchingTasks = getTasksForDefinitions(tasks, definitionIds);
+
+  if (matchingTasks.length === 0) {
+    return null;
+  }
+
+  return matchingTasks.some((task) => !isLiveTaskCompleted(task)) ? 'In Progress' : 'Completed';
+}
+
+function getNoticePreparedStatus(caseItem: BenefitCase, tasks: LiveTaskSummary[]): ChecklistStatus {
+  const finalReviewStatus = getTaskDefinitionProgressStatus(tasks, finalReviewTaskDefinitionIds);
+
+  if (finalReviewStatus) {
+    return finalReviewStatus;
+  }
+
+  if (caseItem.notices.some((notice) => ['Completed', 'Approved', 'Sent', 'Printed'].includes(notice.status))) {
+    return 'Completed';
+  }
+
+  if (caseItem.notices.some((notice) => notice.status === 'Preview Generated')) {
+    return 'In Progress';
+  }
+
+  return toProgressChecklistStatus(getChecklistStatusByLabel(caseItem, 'Notice prepared'));
+}
+
+function getNoticeDisplayStatus(
+  notice: BenefitCase['notices'][number],
+  noticePreparedStatus: ChecklistStatus,
+): string {
+  if (
+    notice.reasonCode.toLowerCase().includes('approval')
+    && getChecklistDisplayStatus(noticePreparedStatus) === 'Completed'
+  ) {
+    return 'Completed';
+  }
+
+  return notice.status === 'Approved' ? 'Completed' : notice.status;
+}
+
+function getSummaryChecklistStatus(
+  caseItem: BenefitCase,
+  sourceLabel: string,
+  tasks: LiveTaskSummary[],
+  showCalculatedBudgetAmount: boolean,
+): ChecklistStatus {
+  if (sourceLabel === 'Application reviewed') {
+    const stageStatus = getStageProgressStatus(caseItem, 1);
+    return stageStatus === 'In Progress' && tasks.length > 0
+      ? 'Completed'
+      : stageStatus || toProgressChecklistStatus(getChecklistStatusByLabel(caseItem, sourceLabel));
+  }
+
+  if (sourceLabel === 'Notice prepared') {
+    return getNoticePreparedStatus(caseItem, tasks);
+  }
+
+  const taskDefinitionIds = summaryChecklistTaskDefinitionIds[sourceLabel];
+  const taskStatus = taskDefinitionIds ? getTaskDefinitionProgressStatus(tasks, taskDefinitionIds) : null;
+
+  if (taskStatus) {
+    return taskStatus;
+  }
+
+  if (sourceLabel === 'Budget reviewed' && showCalculatedBudgetAmount) {
+    return 'In Progress';
+  }
+
+  const stageOrders: Partial<Record<string, number>> = {
+    'Interview complete': 2,
+    'Documents reviewed': 3,
+    'Clearance reviewed': 4,
+    'External validations reviewed': 5,
+    'Budget reviewed': 6,
+  };
+  const stageStatus = stageOrders[sourceLabel] ? getStageProgressStatus(caseItem, stageOrders[sourceLabel]) : null;
+
+  return stageStatus || toProgressChecklistStatus(getChecklistStatusByLabel(caseItem, sourceLabel));
+}
+
+function getBudgetReadinessSourceStatus(caseItem: BenefitCase, label: string): ChecklistStatus | null {
+  return caseItem.budget.readiness.find((item) => item.label === label)?.status || null;
+}
+
+function buildBudgetReadinessChecklist(
+  caseItem: BenefitCase,
+  tasks: LiveTaskSummary[],
+  showCalculatedBudgetAmount: boolean,
+  budgetCreated: boolean,
+): Array<{ label: string; status: ChecklistStatus }> {
+  const budgetTaskStatus = getTaskDefinitionProgressStatus(tasks, budgetTaskDefinitionIds);
+  const clearanceTaskStatus = getTaskDefinitionProgressStatus(tasks, clearanceTaskDefinitionIds);
+  const budgetVerificationStatus = budgetTaskStatus === 'Completed' || showCalculatedBudgetAmount
+    ? 'Completed'
+    : budgetTaskStatus || (budgetCreated ? 'In Progress' : null);
+
+  return caseItem.budget.readiness.map((item) => {
+    if (item.label === 'Application complete') {
+      const stageStatus = getStageProgressStatus(caseItem, 1);
+      return {
+        ...item,
+        status: stageStatus === 'In Progress' && tasks.length > 0
+          ? 'Completed'
+          : stageStatus || toProgressChecklistStatus(getBudgetReadinessSourceStatus(caseItem, item.label)),
+      };
+    }
+
+    if (item.label === 'Income verified' || item.label === 'Expenses verified') {
+      return {
+        ...item,
+        status: budgetVerificationStatus || toProgressChecklistStatus(getBudgetReadinessSourceStatus(caseItem, item.label)),
+      };
+    }
+
+    if (item.label === 'Clearance resolved') {
+      return {
+        ...item,
+        status: clearanceTaskStatus
+          || getStageProgressStatus(caseItem, 4)
+          || toProgressChecklistStatus(getBudgetReadinessSourceStatus(caseItem, item.label)),
+      };
+    }
+
+    return {
+      ...item,
+      status: toProgressChecklistStatus(item.status),
+    };
+  });
 }
 
 function getEffectiveCaseStageOrder(caseItem: BenefitCase): number {
@@ -1902,7 +2101,11 @@ function buildLocalAssignmentTasks(
         process: definition.process,
         lane: definition.lane,
         tab: definition.tab,
-        status: liveTask && !isLiveTaskCompleted(liveTask) ? 'Ready' : getLocalAssignmentTaskStatus(caseItem, definition),
+        status: liveTask
+          ? isLiveTaskCompleted(liveTask)
+            ? 'Completed'
+            : 'Ready'
+          : getLocalAssignmentTaskStatus(caseItem, definition),
         assignedTo,
         assignedGroup,
         dueDate: caseItem.eligibilityDueDate,
@@ -1998,7 +2201,7 @@ function scoreTaskForActionDefinition(task: LiveTaskSummary, definition: ActionA
     return 0;
   }
 
-  return (sameActionApp ? 10 : 0) + exactStepMatch + appNameMatch + keywordScore;
+  return (sameActionApp ? 120 : 0) + exactStepMatch + appNameMatch + keywordScore;
 }
 
 function buildActionTaskRows(tasks: LiveTaskSummary[]) {
@@ -2027,13 +2230,62 @@ function isLiveTaskCompleted(task: LiveTaskSummary): boolean {
   return Boolean(task.completedTime) || task.status === 'Completed' || task.status === 'Complete';
 }
 
+function liveTaskMatchesStatusFilter(task: LiveTaskSummary, filter: LiveTaskStatusFilter): boolean {
+  if (filter === 'all') {
+    return true;
+  }
+
+  const isCompleted = isLiveTaskCompleted(task);
+  return filter === 'completed' ? isCompleted : !isCompleted;
+}
+
+function getLiveTaskDisplayName(task: LiveTaskSummary, definition?: ActionAppDefinition): string {
+  return definition?.name || task.appDefinition?.name || task.title || `Action Center task ${task.id}`;
+}
+
 function mergeVisibleLiveTasks(currentTasks: LiveTaskSummary[], refreshedTasks: LiveTaskSummary[]): LiveTaskSummary[] {
   const refreshedTaskIds = new Set(refreshedTasks.map((task) => task.id));
   const stillVisibleCurrentTasks = currentTasks.filter((task) =>
-    !refreshedTaskIds.has(task.id) && !isLiveTaskCompleted(task)
+    !refreshedTaskIds.has(task.id)
   );
 
   return [...refreshedTasks, ...stillVisibleCurrentTasks];
+}
+
+function assignmentTaskMatchesStatusFilter(task: LocalAssignmentTask, filter: AssignmentTaskStatusFilter): boolean {
+  if (filter === 'all') {
+    return true;
+  }
+
+  if (filter === 'open') {
+    return task.status !== 'Completed';
+  }
+
+  return task.status === filter;
+}
+
+function getAssignmentStatusFilterLabel(filter: AssignmentTaskStatusFilter): string {
+  if (filter === 'all') {
+    return 'All';
+  }
+
+  if (filter === 'open') {
+    return 'Open';
+  }
+
+  return filter;
+}
+
+function getAssignmentStatusFilterOptionLabel(filter: AssignmentTaskStatusFilter): string {
+  if (filter === 'all') {
+    return 'All statuses';
+  }
+
+  if (filter === 'open') {
+    return 'Open tasks';
+  }
+
+  return filter;
 }
 
 const budgetCalculationTaskTerms = [
@@ -2436,6 +2688,14 @@ function ActionButton({
   );
 }
 
+function CompletedTaskBadge() {
+  return (
+    <span className="inline-flex items-center justify-center gap-2 rounded-lg border border-green-600 bg-green-600 px-3 py-2 text-sm font-medium text-white shadow-sm">
+      Completed
+    </span>
+  );
+}
+
 function Field({ label, value, help }: { label: string; value: ReactNode; help?: string }) {
   return (
     <div className="min-w-0">
@@ -2590,7 +2850,7 @@ function App() {
   const [mockTestReturns, setMockTestReturns] = useState<Record<string, string>>({});
   const assignmentUsers = defaultAssignmentUsers;
   const [assignmentTaskOverrides, setAssignmentTaskOverrides] = useState<Record<string, LocalAssignmentOverride>>({});
-  const [assignmentTaskStatusFilter, setAssignmentTaskStatusFilter] = useState<LocalAssignmentTaskStatus | 'all'>(defaultAssignmentTaskStatusFilter);
+  const [assignmentTaskStatusFilter, setAssignmentTaskStatusFilter] = useState<AssignmentTaskStatusFilter>(defaultAssignmentTaskStatusFilter);
   const [assignmentTaskGroupFilter, setAssignmentTaskGroupFilter] = useState('all');
   const [assignmentRoutingMode, setAssignmentRoutingMode] = useState<AssignmentRoutingMode>('User');
   const [assignmentDialogTask, setAssignmentDialogTask] = useState<LocalAssignmentTask | null>(null);
@@ -2599,6 +2859,8 @@ function App() {
   const [activeAssignmentSubtab, setActiveAssignmentSubtab] = useState<AssignmentSubtab>('Task Assignments');
   const [assignmentPtoEntries, setAssignmentPtoEntries] = useState<LocalPtoEntry[]>(defaultAssignmentPtoEntries);
   const [assignmentPtoMonth, setAssignmentPtoMonth] = useState('2026-06');
+  const [isSimulateApplicationDialogOpen, setIsSimulateApplicationDialogOpen] = useState(false);
+  const [simulatedApplicationEmail, setSimulatedApplicationEmail] = useState(simulatedApplicationEmailOptions[0]);
   const [newPtoUserName, setNewPtoUserName] = useState(defaultAssignmentUsers[0]?.name || '');
   const [newPtoWorkerEmail, setNewPtoWorkerEmail] = useState(defaultAssignmentUsers[0]?.email || IES_WORKFLOW_CONFIG.defaultApplicantEmail);
   const [newPtoStartDate, setNewPtoStartDate] = useState('2026-06-01');
@@ -2612,6 +2874,8 @@ function App() {
   const [startedInstanceByCase, setStartedInstanceByCase] = useState<Record<string, string>>({});
   const [liveMaestroContext, setLiveMaestroContext] = useState<LiveMaestroContext | null>(null);
   const [liveTasks, setLiveTasks] = useState<LiveTaskSummary[]>([]);
+  const liveTasksRef = useRef<LiveTaskSummary[]>([]);
+  const [liveTaskStatusFilter, setLiveTaskStatusFilter] = useState<LiveTaskStatusFilter>('all');
   const [liveTaskStatus, setLiveTaskStatus] = useState<LiveLoadState>('idle');
   const [liveTaskError, setLiveTaskError] = useState<string | null>(null);
   const [assignmentLiveTasksByCaseId, setAssignmentLiveTasksByCaseId] = useState<Record<string, LiveTaskSummary[]>>({});
@@ -2681,7 +2945,7 @@ function App() {
     Boolean(matchedLiveRecord),
     liveMaestroContext,
   );
-  const noticePreviewGenerated = selectedCase.notices.some((notice) => ['Preview Generated', 'Approved', 'Sent', 'Printed'].includes(notice.status));
+  const noticePreviewGenerated = selectedCase.notices.some((notice) => ['Preview Generated', 'Approved', 'Sent', 'Printed', 'Completed'].includes(notice.status));
   const currentHelpContext: HelpContextId = screen === 'detail'
     ? activeTab === 'Summary'
       ? 'summary'
@@ -3234,19 +3498,22 @@ function App() {
   );
 
   const filteredAssignmentTasks = useMemo(() => localAssignmentTasks.filter((task) =>
-    (assignmentTaskStatusFilter === 'all' || task.status === assignmentTaskStatusFilter)
+    assignmentTaskMatchesStatusFilter(task, assignmentTaskStatusFilter)
     && (assignmentTaskGroupFilter === 'all' || task.assignedGroup === assignmentTaskGroupFilter)
   ), [localAssignmentTasks, assignmentTaskStatusFilter, assignmentTaskGroupFilter]);
 
-  const assignmentStatusCounts = useMemo(() => assignmentTaskStatusOptions.reduce<Record<LocalAssignmentTaskStatus | 'all', number>>(
+  const assignmentStatusCounts = useMemo(() => assignmentTaskStatusOptions.reduce<Record<AssignmentTaskStatusFilter, number>>(
     (counts, status) => ({
       ...counts,
       [status]: status === 'all'
         ? localAssignmentTasks.length
-        : localAssignmentTasks.filter((task) => task.status === status).length,
+        : status === 'open'
+          ? localAssignmentTasks.filter((task) => task.status !== 'Completed').length
+          : localAssignmentTasks.filter((task) => task.status === status).length,
     }),
     {
       all: 0,
+      open: 0,
       Ready: 0,
       Queued: 0,
       Completed: 0,
@@ -3401,13 +3668,18 @@ function App() {
     setLiveTaskError(null);
 
     try {
+      const visibleTaskIds = liveTasksRef.current.map((task) => task.id);
+      const taskIdsToRefresh = Array.from(new Set([
+        ...liveRecordActionTaskReferences.taskIds,
+        ...visibleTaskIds,
+      ]));
       const [context, tasks] = await Promise.all([
         fetchMaestroInstanceContext(sdk, selectedInstanceId, selectedMaestroFolderKey).catch(() => null),
         findPendingTasksForInstance(
           sdk,
           selectedInstanceId,
           liveRecordActionTaskReferences.instanceIds,
-          liveRecordActionTaskReferences.taskIds,
+          taskIdsToRefresh,
         ),
       ]);
       setLiveMaestroContext(context);
@@ -3432,6 +3704,10 @@ function App() {
   useEffect(() => {
     void refreshLiveRecords();
   }, [refreshLiveRecords]);
+
+  useEffect(() => {
+    liveTasksRef.current = liveTasks;
+  }, [liveTasks]);
 
   useEffect(() => {
     setLiveTasks([]);
@@ -3476,6 +3752,7 @@ function App() {
   const handleStartMaestroCase = async (
     caseItem: BenefitCase = simulatedApplicationCase,
     relatedScreen = 'Case Detail',
+    applicantEmail = IES_WORKFLOW_CONFIG.defaultApplicantEmail,
   ) => {
     if (!canUseUiPath) {
       showToast(uiPathDisabledReason || 'UiPath sign-in is required.', 'warning');
@@ -3486,7 +3763,7 @@ function App() {
     setSelectedCaseId(caseItem.id);
 
     try {
-      const result = await startMaestroCase(sdk, caseItem);
+      const result = await startMaestroCase(sdk, caseItem, applicantEmail);
 
       if (result.instanceId) {
         setStartedInstanceByCase((current) => ({
@@ -3498,11 +3775,11 @@ function App() {
       appendAuditEvent(
         caseItem.id,
         'Maestro Case Started',
-        `Started UiPath Maestro process ${IES_WORKFLOW_CONFIG.maestroProcessKey} for ${caseItem.mybNumber}.`,
+        `Started UiPath Maestro process ${IES_WORKFLOW_CONFIG.maestroProcessKey} for ${caseItem.mybNumber} using ${applicantEmail}.`,
         relatedScreen,
         'System actions',
       );
-      showToast('New Application Created', 'success');
+      showToast(`New Application Created for ${applicantEmail}`, 'success');
       window.setTimeout(() => {
         void refreshLiveRecords();
       }, 4000);
@@ -3563,7 +3840,7 @@ function App() {
     const taskLink = buildTaskLink(task.id);
     const taskEmbed: TaskEmbedState = {
       taskId: task.id,
-      title: definition?.name || task.appDefinition?.name || task.title,
+      title: getLiveTaskDisplayName(task, definition),
       taskLink,
       embedUrl: convertTaskLinkToEmbedUrl(taskLink),
       tab: definition?.tab || task.appDefinition?.tab,
@@ -3577,7 +3854,7 @@ function App() {
     appendAuditEvent(
       selectedCase.id,
       'UiPath Action Opened',
-      `Opened Action Center task ${task.id}: ${task.title}.`,
+      `Opened Action Center task ${task.id}: ${getLiveTaskDisplayName(task, definition)}.`,
       'Case Detail',
       'Worker actions',
     );
@@ -3694,13 +3971,19 @@ function App() {
   ) : null;
 
   const LiveActionPanel = () => {
-    const taskRows = buildActionTaskRows(liveTasks)
+    const filteredLiveTasks = liveTasks.filter((task) => liveTaskMatchesStatusFilter(task, liveTaskStatusFilter));
+    const liveTaskStatusCounts: Record<LiveTaskStatusFilter, number> = {
+      all: liveTasks.length,
+      open: liveTasks.filter((task) => !isLiveTaskCompleted(task)).length,
+      completed: liveTasks.filter(isLiveTaskCompleted).length,
+    };
+    const taskRows = buildActionTaskRows(filteredLiveTasks)
       .filter(({ task }) => Boolean(task)) as Array<{ definition: ActionAppDefinition; task: LiveTaskSummary }>;
     const matchedTaskIds = new Set(
       taskRows
         .map(({ task }) => task.id),
     );
-    const unmatchedTasks = liveTasks.filter((task) => !matchedTaskIds.has(task.id));
+    const unmatchedTasks = filteredLiveTasks.filter((task) => !matchedTaskIds.has(task.id));
     const hasVisibleTasks = taskRows.length > 0 || unmatchedTasks.length > 0;
     const uiPathStatus = canUseUiPath
       ? currentUserEmail || 'Connected'
@@ -3711,6 +3994,11 @@ function App() {
         ? 'Linked'
         : 'Not linked';
     const missingInstanceReason = 'No Maestro instance ID is linked to this case yet.';
+    const taskRefreshDisabledReason = isTaskEmbedOpen
+      ? 'Close the open task before refreshing actions.'
+      : !selectedInstanceId
+        ? 'Start or link a Maestro instance first.'
+        : uiPathDisabledReason;
 
     return (
       <SectionCard
@@ -3718,8 +4006,8 @@ function App() {
         actions={(
           <div className="flex flex-wrap gap-2">
             <ActionButton
-              disabled={!canUseUiPath || !selectedInstanceId || liveTaskStatus === 'loading'}
-              disabledReason={!selectedInstanceId ? 'Start or link a Maestro instance first.' : uiPathDisabledReason}
+              disabled={!canUseUiPath || !selectedInstanceId || liveTaskStatus === 'loading' || isTaskEmbedOpen}
+              disabledReason={taskRefreshDisabledReason}
               onClick={() => void refreshLiveTasks()}
             >
               {liveTaskStatus === 'loading' ? 'Refreshing Actions' : 'Refresh Actions'}
@@ -3748,6 +4036,37 @@ function App() {
             </div>
           )}
 
+          <div>
+            <span className="text-sm font-medium text-gray-700">Task Filter</span>
+            <div className="mt-2 grid grid-cols-3 gap-2 sm:max-w-xl" role="group" aria-label="Live task status filter">
+              {liveTaskStatusFilterOptions.map((status) => {
+                const isActiveStatus = liveTaskStatusFilter === status;
+
+                return (
+                  <button
+                    key={status}
+                    type="button"
+                    aria-pressed={isActiveStatus}
+                    onClick={() => setLiveTaskStatusFilter(status)}
+                    className={`flex items-center justify-between rounded-md border px-3 py-2 text-sm font-medium transition ${
+                      isActiveStatus
+                        ? 'border-blue-600 bg-blue-50 text-blue-800 shadow-sm'
+                        : 'border-gray-200 bg-white text-gray-700 hover:border-blue-300 hover:bg-blue-50'
+                    }`}
+                  >
+                    <span>{liveTaskStatusFilterLabels[status]}</span>
+                    <span className={`ml-3 rounded-full px-2 py-0.5 text-xs ${
+                      isActiveStatus ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-600'
+                    }`}
+                    >
+                      {liveTaskStatusCounts[status]}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {taskRows.length > 0 && (
             <div className="overflow-hidden rounded-lg border border-gray-200">
               <div className="grid grid-cols-12 gap-3 bg-gray-50 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
@@ -3768,15 +4087,16 @@ function App() {
                     </div>
                   </div>
                   <div className="col-span-12 md:col-span-3 min-w-0">
-                    <p className="font-medium text-gray-900 truncate">{task.title}</p>
+                    <p className="font-medium text-gray-900 truncate">{getLiveTaskDisplayName(task, definition)}</p>
                     <p className="text-xs text-gray-500">Task {task.id} - {task.assignedTo || task.status}</p>
                   </div>
                   <div className="col-span-12 md:col-span-4 flex flex-wrap items-center gap-2">
-                    <ActionButton onClick={() => handleOpenTask(task, 'modal', definition)}>
-                      Open Task
-                    </ActionButton>
-                    {isLiveTaskCompleted(task) && (
-                      <Pill label="Completed" className="bg-green-100 text-green-800 border-green-200" />
+                    {isLiveTaskCompleted(task) ? (
+                      <CompletedTaskBadge />
+                    ) : (
+                      <ActionButton onClick={() => handleOpenTask(task, 'modal', definition)}>
+                        Open Task
+                      </ActionButton>
                     )}
                   </div>
                 </div>
@@ -3790,7 +4110,7 @@ function App() {
                 {liveTaskStatus === 'loading' ? 'Case Processing' : 'No tasks available'}
               </p>
               <p className="mt-1 text-gray-600">
-                No assigned Action Center tasks are available for this case yet.
+                No assigned Action Center tasks match the current filter for this case.
               </p>
             </div>
           )}
@@ -3801,13 +4121,14 @@ function App() {
               {unmatchedTasks.map((task) => (
                 <div key={task.id} className="flex flex-wrap items-center justify-between gap-3 border border-gray-200 rounded-lg px-4 py-3 text-sm">
                   <div className="min-w-0">
-                    <p className="font-medium text-gray-900 truncate">{task.title}</p>
+                    <p className="font-medium text-gray-900 truncate">{getLiveTaskDisplayName(task)}</p>
                     <p className="text-xs text-gray-500">Task {task.id} - {task.status}</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <ActionButton onClick={() => handleOpenTask(task)}>Open Task</ActionButton>
-                    {isLiveTaskCompleted(task) && (
-                      <Pill label="Completed" className="bg-green-100 text-green-800 border-green-200" />
+                    {isLiveTaskCompleted(task) ? (
+                      <CompletedTaskBadge />
+                    ) : (
+                      <ActionButton onClick={() => handleOpenTask(task)}>Open Task</ActionButton>
                     )}
                   </div>
                 </div>
@@ -3830,6 +4151,17 @@ function App() {
 
   const LiveTabTaskPanel = ({ tab }: { tab: LiveActionAppTab }) => {
     const tabTasks = getTasksForTab(liveTasks, tab);
+    const openTabTasks = tabTasks.filter((task) => !isLiveTaskCompleted(task));
+    const completedTabTasks = tabTasks.filter((task) => isLiveTaskCompleted(task));
+    const taskSummary = openTabTasks.length > 0
+      ? completedTabTasks.length > 0
+        ? `${openTabTasks.length} ready, ${completedTabTasks.length} completed.`
+        : openTabTasks.length === 1
+          ? `Task ${openTabTasks[0]?.id} is ready.`
+          : `${openTabTasks.length} tasks are ready.`
+      : completedTabTasks.length === 1
+        ? `Task ${completedTabTasks[0]?.id} is completed.`
+        : `${completedTabTasks.length} tasks are completed.`;
 
     if (!isMaestroLoaded || tabTasks.length === 0) {
       return null;
@@ -3841,18 +4173,21 @@ function App() {
           <div className="min-w-0">
             <p className="text-sm font-semibold text-blue-950">{liveTaskPanelTitles[tab]}</p>
             <p className="text-xs text-blue-800">
-              {tabTasks.length === 1 ? `Task ${tabTasks[0].id} is ready.` : `${tabTasks.length} tasks are ready.`}
+              {taskSummary}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {tabTasks.map((task) => (
+            {openTabTasks.map((task) => (
               <ActionButton key={task.id} variant="primary" onClick={() => handleOpenTask(task, 'inline')}>
-                Open {task.appDefinition?.name || task.title}
+                Open {getLiveTaskDisplayName(task)}
               </ActionButton>
             ))}
+            {completedTabTasks.map((task) => (
+              <CompletedTaskBadge key={task.id} />
+            ))}
             <ActionButton
-              disabled={!canUseUiPath || liveTaskStatus === 'loading'}
-              disabledReason={uiPathDisabledReason}
+              disabled={!canUseUiPath || liveTaskStatus === 'loading' || isTaskEmbedOpen}
+              disabledReason={isTaskEmbedOpen ? 'Close the open task before refreshing actions.' : uiPathDisabledReason}
               onClick={() => void refreshLiveTasks()}
             >
               {liveTaskStatus === 'loading' ? 'Refreshing Actions' : 'Refresh Actions'}
@@ -3923,6 +4258,75 @@ function App() {
       </div>
     </div>
   ) : null;
+
+  const SimulateApplicationDialog = () => {
+    if (!isSimulateApplicationDialogOpen) {
+      return null;
+    }
+
+    return (
+      <div className="fixed inset-0 z-40 bg-gray-900/50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-lg border border-gray-200 shadow-xl max-w-lg w-full">
+          <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Simulate new Application</h2>
+              <p className="mt-1 text-sm text-gray-600">Choose the applicant email for the Maestro start input.</p>
+            </div>
+            <button
+              className="text-gray-500 hover:text-gray-900 disabled:text-gray-300"
+              disabled={isStartingMaestro}
+              onClick={() => setIsSimulateApplicationDialogOpen(false)}
+              aria-label="Close simulate application dialog"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <div className="space-y-4 p-5 text-sm text-gray-700">
+            <label className="block">
+              <span className="text-sm font-medium text-gray-700">Applicant email</span>
+              <select
+                value={simulatedApplicationEmail}
+                onChange={(event) => setSimulatedApplicationEmail(event.target.value)}
+                disabled={isStartingMaestro}
+                className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
+              >
+                {simulatedApplicationEmailOptions.map((email) => (
+                  <option key={email} value={email}>{email}</option>
+                ))}
+              </select>
+            </label>
+
+            <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
+              <Field label="Case template" value={`${simulatedApplicationCase.mybNumber} / ${simulatedApplicationCase.applicantName}`} />
+            </div>
+          </div>
+
+          <div className="px-5 py-4 border-t border-gray-200 flex justify-end gap-3">
+            <ActionButton
+              disabled={isStartingMaestro}
+              onClick={() => setIsSimulateApplicationDialogOpen(false)}
+            >
+              Cancel
+            </ActionButton>
+            <ActionButton
+              variant="primary"
+              disabled={!canUseUiPath || isStartingMaestro}
+              disabledReason={uiPathDisabledReason}
+              onClick={() => {
+                setIsSimulateApplicationDialogOpen(false);
+                void handleStartMaestroCase(simulatedApplicationCase, 'Case Inbox', simulatedApplicationEmail);
+              }}
+            >
+              {isStartingMaestro ? 'Creating...' : 'Create Application'}
+            </ActionButton>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   const TaskAssignmentDialog = () => {
     if (!assignmentDialogTask) {
@@ -4195,7 +4599,7 @@ function App() {
               variant="primary"
               disabled={!canUseUiPath || isStartingMaestro}
               disabledReason={uiPathDisabledReason}
-              onClick={() => void handleStartMaestroCase(simulatedApplicationCase, 'Case Inbox')}
+              onClick={() => setIsSimulateApplicationDialogOpen(true)}
             >
               Simulate new Application
             </ActionButton>
@@ -4421,33 +4825,10 @@ function App() {
     const summaryStatus = ['Approved', 'Denied', 'Withdrawn'].includes(selectedCase.status)
       ? selectedCase.status
       : 'Processing';
-    const currentStageText = selectedCase.currentStage.toLowerCase();
-    const hasAnyParallelSubprocessTask = [
-      'Interview / Missing Info',
-      'Documents',
-      'Clearance',
-      'External Validation',
-    ].some((tab) => getTasksForTab(liveTasks, tab as LiveActionAppTab).length > 0);
-    const parallelSubprocessesRunning = hasAnyParallelSubprocessTask
-      || ['interview', 'document', 'clearance', 'external validation'].some((stage) => currentStageText.includes(stage));
-    const checklistItems = summaryChecklistRows.map((row) => {
-      const subprocessTab = subprocessTabByChecklistLabel[row.sourceLabel];
-      const hasPendingSubprocessTask = subprocessTab
-        ? getTasksForTab(liveTasks, subprocessTab).length > 0
-        : false;
-      let status: ChecklistStatus = 'Not Started';
-
-      if (row.sourceLabel === 'Interview complete') {
-        status = hasPendingSubprocessTask || parallelSubprocessesRunning ? 'Pending' : 'Not Started';
-      } else if (['Documents reviewed', 'Clearance reviewed', 'External validations reviewed'].includes(row.sourceLabel)) {
-        status = hasPendingSubprocessTask || parallelSubprocessesRunning ? 'In Progress' : 'Not Started';
-      }
-
-      return {
-        label: row.label,
-        status,
-      };
-    });
+    const checklistItems = summaryChecklistRows.map((row) => ({
+      label: row.label,
+      status: getSummaryChecklistStatus(selectedCase, row.sourceLabel, liveTasks, showCalculatedBudgetAmount),
+    }));
     const snapApplicationHousehold = [
       {
         name: 'Michael M. Motorist',
@@ -4713,7 +5094,7 @@ function App() {
                         : 'border-gray-200 bg-white text-gray-700 hover:border-blue-300 hover:bg-blue-50'
                     }`}
                   >
-                    <span>{status === 'all' ? 'All' : status}</span>
+                    <span>{getAssignmentStatusFilterLabel(status)}</span>
                     <span className={`ml-3 rounded-full px-2 py-0.5 text-xs ${
                       isActiveStatus ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-600'
                     }`}
@@ -4731,11 +5112,11 @@ function App() {
               <span className="text-sm font-medium text-gray-700">Task Status</span>
               <select
                 value={assignmentTaskStatusFilter}
-                onChange={(event) => setAssignmentTaskStatusFilter(event.target.value as LocalAssignmentTaskStatus | 'all')}
+                onChange={(event) => setAssignmentTaskStatusFilter(event.target.value as AssignmentTaskStatusFilter)}
                 className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
               >
                 {assignmentTaskStatusOptions.map((status) => (
-                  <option key={status} value={status}>{status === 'all' ? 'All statuses' : status}</option>
+                  <option key={status} value={status}>{getAssignmentStatusFilterOptionLabel(status)}</option>
                 ))}
               </select>
             </label>
@@ -5599,43 +5980,53 @@ function App() {
     );
   };
 
-  const BudgetTab = () => (
-    <div className="space-y-6">
-      <ScreenGuidance context="budget" />
+  const BudgetTab = () => {
+    const budgetReadinessItems = buildBudgetReadinessChecklist(
+      selectedCase,
+      liveTasks,
+      showCalculatedBudgetAmount,
+      budgetCreated,
+    );
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <SectionCard title="Budget Readiness Checklist">
-          <Checklist items={selectedCase.budget.readiness} />
-        </SectionCard>
-        <SectionCard title="Budget Calculation">
-          <dl className="space-y-4">
-            {showBudgetIncomeUsed && <Field label="Income Used" value={selectedCase.budget.incomeUsed} />}
-            {showCalculatedBudgetAmount && (
-              <Field
-                label="Calculated Benefit Amount"
-                value={<span className="text-green-700 font-semibold">{selectedCase.budget.mockBenefitAmount}</span>}
-              />
-            )}
-            <Field label="Budget Status" value={<Pill label={selectedCase.budget.status} />} />
-          </dl>
-        </SectionCard>
-        <SectionCard title="Worker Review Notes">
-          <div className="space-y-2">
-            {selectedCase.budget.notes.map((note) => (
-              <div key={note} className="border border-gray-200 rounded-lg p-3 text-sm text-gray-700">{note}</div>
-            ))}
-          </div>
-        </SectionCard>
+    return (
+      <div className="space-y-6">
+        <ScreenGuidance context="budget" />
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <SectionCard title="Budget Readiness Checklist">
+            <Checklist items={budgetReadinessItems} />
+          </SectionCard>
+          <SectionCard title="Budget Calculation">
+            <dl className="space-y-4">
+              {showBudgetIncomeUsed && <Field label="Income Used" value={selectedCase.budget.incomeUsed} />}
+              {showCalculatedBudgetAmount && (
+                <Field
+                  label="Calculated Benefit Amount"
+                  value={<span className="text-green-700 font-semibold">{selectedCase.budget.mockBenefitAmount}</span>}
+                />
+              )}
+              <Field label="Budget Status" value={<Pill label={selectedCase.budget.status} />} />
+            </dl>
+          </SectionCard>
+          <SectionCard title="Worker Review Notes">
+            <div className="space-y-2">
+              {selectedCase.budget.notes.map((note) => (
+                <div key={note} className="border border-gray-200 rounded-lg p-3 text-sm text-gray-700">{note}</div>
+              ))}
+            </div>
+          </SectionCard>
+        </div>
+
+        <HelpBox>
+          Budget values update from the live case record after Maestro reaches the budget calculation step.
+        </HelpBox>
       </div>
-
-      <HelpBox>
-        Budget values update from the live case record after Maestro reaches the budget calculation step.
-      </HelpBox>
-    </div>
-  );
+    );
+  };
 
   const FormsNoticesTab = () => {
     const selectedNotice = selectedCase.notices.find((notice) => notice.requiresText);
+    const noticePreparedStatus = getNoticePreparedStatus(selectedCase, liveTasks);
 
     return (
       <div className="space-y-6">
@@ -5648,7 +6039,7 @@ function App() {
                 <div key={notice.id} className="border border-gray-200 rounded-lg p-3">
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-sm font-medium text-gray-900">{notice.reasonCode}</p>
-                    <Pill label={notice.status} />
+                    <Pill label={getNoticeDisplayStatus(notice, noticePreparedStatus)} />
                   </div>
                   {notice.requiresText && (
                     <textarea
@@ -5686,7 +6077,7 @@ function App() {
               <p>Status: {selectedCase.status}</p>
               <div className="mt-4 space-y-2">
                 {selectedCase.notices.map((notice) => (
-                  <p key={notice.id}>- {notice.reasonCode}{notice.dynamicText ? `: ${notice.dynamicText}` : ''}</p>
+                  <p key={notice.id}>- {notice.reasonCode} ({getNoticeDisplayStatus(notice, noticePreparedStatus)}){notice.dynamicText ? `: ${notice.dynamicText}` : ''}</p>
                 ))}
               </div>
             </div>
@@ -5798,7 +6189,7 @@ function App() {
       'Forms & Notices': (
         <>
           {viewAllActionsButton}
-          <ActionButton disabled={!roleCanEdit(role, activeTab) || !noticePreviewGenerated} disabledReason={!noticePreviewGenerated ? 'Approve Notice disabled because a notice preview has not been generated.' : editDisabledReason(activeTab)} onClick={() => runCaseAction('Forms & Notices', 'Notice Approved', 'Notice approved locally.', (caseItem) => ({ ...caseItem, notices: caseItem.notices.map((notice) => ({ ...notice, status: 'Approved' })) }), 'Notice events')}>Approve Notice</ActionButton>
+          <ActionButton disabled={!roleCanEdit(role, activeTab) || !noticePreviewGenerated} disabledReason={!noticePreviewGenerated ? 'Approve Notice disabled because a notice preview has not been generated.' : editDisabledReason(activeTab)} onClick={() => runCaseAction('Forms & Notices', 'Notice Approved', 'Notice completed locally.', (caseItem) => ({ ...caseItem, notices: caseItem.notices.map((notice) => ({ ...notice, status: 'Completed' })) }), 'Notice events')}>Approve Notice</ActionButton>
           <ActionButton disabled={!roleCanEdit(role, activeTab)} onClick={() => runCaseAction('Forms & Notices', 'Mock Notice Sent', 'Mock notice sent locally.', (caseItem) => ({ ...caseItem, notices: caseItem.notices.map((notice) => ({ ...notice, status: 'Sent' })) }), 'Notice events')}>Send Mock Notice</ActionButton>
         </>
       ),
@@ -6001,30 +6392,18 @@ function App() {
         <>
       <SectionCard
         title={IES_WORKFLOW_CONFIG.insightsDashboards.iesSnapDash.name}
-        actions={(
+      >
+        <div className="flex justify-start">
           <a
             href={IES_WORKFLOW_CONFIG.insightsDashboards.iesSnapDash.url}
             target="_blank"
             rel="noreferrer"
             className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-800 hover:border-blue-300 hover:bg-blue-100"
           >
-            Open in UiPath Insights
+            Open in Insights
           </a>
-        )}
-      >
-        <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
-          <iframe
-            title={IES_WORKFLOW_CONFIG.insightsDashboards.iesSnapDash.name}
-            src={IES_WORKFLOW_CONFIG.insightsDashboards.iesSnapDash.url}
-            className="h-[72vh] min-h-[44rem] w-full bg-white"
-            allow="fullscreen"
-          />
         </div>
       </SectionCard>
-
-      <HelpBox>
-        This tab embeds the UiPath Insights dashboard when the tenant permits framing. Use Open in UiPath Insights if the browser blocks the embedded view.
-      </HelpBox>
         </>
       )}
     </div>
@@ -6458,6 +6837,7 @@ function App() {
       </main>
       <ToastStack />
       <Modal />
+      <SimulateApplicationDialog />
       <TaskAssignmentDialog />
       <TaskEmbedModal />
       <HelpDrawer />
