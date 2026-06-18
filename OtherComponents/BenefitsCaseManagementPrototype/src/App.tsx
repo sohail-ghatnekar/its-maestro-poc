@@ -18,11 +18,13 @@ import {
   fetchDocumentFromBucket,
   fetchLiveCaseRecords,
   fetchMaestroInstanceContext,
+  fetchTaskAssignmentRecords,
   findMatchingLiveRecord,
   findPendingTasksForInstance,
   getLiveRecordActionTaskReferences,
   getLiveRecordFolderKey,
   getLiveRecordInstanceId,
+  getTaskAssignmentTaskIdsForInstances,
   getTasksForTab,
   startMaestroCase,
   startTaskAssignmentProcess,
@@ -31,6 +33,7 @@ import {
 import type {
   LiveCaseRecord,
   LiveMaestroContext,
+  LiveTaskAssignmentRecord,
   LiveTaskSummary,
 } from './services/uipathCaseManagement';
 import {
@@ -2087,6 +2090,7 @@ function buildLocalAssignmentTasks(
       const assignedTo = override?.assignedTo
         || (liveTask ? liveAssignedTo || 'Unassigned' : null)
         || getDefaultAssignmentUser(definition, caseItem, users, ptoEntries, fallbackIndex);
+      const inferredStatus = getLocalAssignmentTaskStatus(caseItem, definition);
 
       return {
         id,
@@ -2105,7 +2109,9 @@ function buildLocalAssignmentTasks(
           ? isLiveTaskCompleted(liveTask)
             ? 'Completed'
             : 'Ready'
-          : getLocalAssignmentTaskStatus(caseItem, definition),
+          : inferredStatus === 'Completed'
+            ? 'Completed'
+            : 'Queued',
         assignedTo,
         assignedGroup,
         dueDate: caseItem.eligibilityDueDate,
@@ -2869,12 +2875,14 @@ function App() {
   const [isStartingWorkerPto, setIsStartingWorkerPto] = useState(false);
   const [startingTaskAssignmentId, setStartingTaskAssignmentId] = useState<string | null>(null);
   const [liveRecords, setLiveRecords] = useState<LiveCaseRecord[]>([]);
+  const [, setLiveTaskAssignmentRecords] = useState<LiveTaskAssignmentRecord[]>([]);
   const [liveDataStatus, setLiveDataStatus] = useState<LiveLoadState>('idle');
   const [liveDataError, setLiveDataError] = useState<string | null>(null);
   const [startedInstanceByCase, setStartedInstanceByCase] = useState<Record<string, string>>({});
   const [liveMaestroContext, setLiveMaestroContext] = useState<LiveMaestroContext | null>(null);
   const [liveTasks, setLiveTasks] = useState<LiveTaskSummary[]>([]);
   const liveTasksRef = useRef<LiveTaskSummary[]>([]);
+  const liveTasksScopeRef = useRef<{ caseId: string; instanceId: string | null }>({ caseId: '', instanceId: null });
   const [liveTaskStatusFilter, setLiveTaskStatusFilter] = useState<LiveTaskStatusFilter>('all');
   const [liveTaskStatus, setLiveTaskStatus] = useState<LiveLoadState>('idle');
   const [liveTaskError, setLiveTaskError] = useState<string | null>(null);
@@ -3424,12 +3432,14 @@ function App() {
 
         return {
           caseId: caseItem.id,
+          caseNumber: caseItem.mybNumber,
           instanceId,
           references: getLiveRecordActionTaskReferences(liveRecord),
         };
       })
       .filter((request): request is {
         caseId: string;
+        caseNumber: string;
         instanceId: string;
         references: ReturnType<typeof getLiveRecordActionTaskReferences>;
       } => Boolean(request));
@@ -3445,13 +3455,36 @@ function App() {
     setAssignmentLiveTaskError(null);
 
     try {
+      let taskAssignmentRecords: LiveTaskAssignmentRecord[] = [];
+      let taskAssignmentReadError: string | null = null;
+
+      try {
+        taskAssignmentRecords = await fetchTaskAssignmentRecords(sdk);
+        setLiveTaskAssignmentRecords(taskAssignmentRecords);
+      } catch (error) {
+        taskAssignmentReadError = getErrorMessage(error);
+        console.warn('TaskAssignment Data Fabric read failed.', error);
+      }
+
       const taskResults = await Promise.all(taskRequests.map(async (request) => {
         try {
+          const relatedInstanceIds = [request.instanceId, ...request.references.instanceIds];
+          const taskAssignmentTaskIds = getTaskAssignmentTaskIdsForInstances(
+            taskAssignmentRecords,
+            relatedInstanceIds,
+          );
+          const explicitTaskIds = Array.from(new Set([
+            ...request.references.taskIds,
+            ...taskAssignmentTaskIds,
+          ]));
           const tasks = await findPendingTasksForInstance(
             sdk,
             request.instanceId,
-            request.references.instanceIds,
-            request.references.taskIds,
+            {
+              caseNumber: request.caseNumber,
+              relatedInstanceIds: request.references.instanceIds,
+              explicitTaskIds,
+            },
           );
 
           return {
@@ -3470,6 +3503,9 @@ function App() {
 
       setAssignmentLiveTasksByCaseId(Object.fromEntries(taskResults.map((result) => [result.caseId, result.tasks])));
       const errors = taskResults.filter((result) => result.error).map((result) => result.error);
+      if (taskAssignmentReadError) {
+        errors.unshift(`TaskAssignment entity read failed: ${taskAssignmentReadError}`);
+      }
       setAssignmentLiveTaskError(errors.length ? Array.from(new Set(errors)).join(' ') : null);
       setAssignmentLiveTaskStatus('ready');
     } catch (error) {
@@ -3594,6 +3630,7 @@ function App() {
     setCases([]);
     setSelectedCaseId('');
     setLiveRecords([]);
+    setLiveTaskAssignmentRecords([]);
     setLiveDataStatus('idle');
     setLiveDataError(null);
     setActiveTab('Summary');
@@ -3623,6 +3660,7 @@ function App() {
   const refreshLiveRecords = useCallback(async () => {
     if (!canUseUiPath) {
       setLiveRecords([]);
+      setLiveTaskAssignmentRecords([]);
       setCases([]);
       setSelectedCaseId('');
       setLiveDataStatus('idle');
@@ -3657,6 +3695,8 @@ function App() {
     const preserveVisibleTasks = options.preserveVisibleTasks === true;
 
     if (!canUseUiPath || !selectedInstanceId) {
+      liveTasksRef.current = [];
+      liveTasksScopeRef.current = { caseId: selectedCase.id, instanceId: selectedInstanceId || null };
       setLiveTasks([]);
       setLiveMaestroContext(null);
       setLiveTaskStatus('idle');
@@ -3664,42 +3704,88 @@ function App() {
       return;
     }
 
+    const requestCaseId = selectedCase.id;
+    const requestCaseNumber = selectedCase.mybNumber;
+    const requestInstanceId = selectedInstanceId;
+    const scopedVisibleTaskIds = liveTasksScopeRef.current.caseId === requestCaseId
+      && liveTasksScopeRef.current.instanceId === requestInstanceId
+      ? liveTasksRef.current.map((task) => task.id)
+      : [];
+
     setLiveTaskStatus('loading');
     setLiveTaskError(null);
 
     try {
-      const visibleTaskIds = liveTasksRef.current.map((task) => task.id);
-      const taskIdsToRefresh = Array.from(new Set([
+      let taskAssignmentRecords: LiveTaskAssignmentRecord[] = [];
+
+      try {
+        taskAssignmentRecords = await fetchTaskAssignmentRecords(sdk);
+        setLiveTaskAssignmentRecords(taskAssignmentRecords);
+      } catch (error) {
+        console.warn('TaskAssignment Data Fabric read failed.', error);
+      }
+
+      const relatedInstanceIds = [
+        requestInstanceId,
+        ...liveRecordActionTaskReferences.instanceIds,
+      ];
+      const taskAssignmentTaskIds = getTaskAssignmentTaskIdsForInstances(
+        taskAssignmentRecords,
+        relatedInstanceIds,
+      );
+      const explicitTaskIds = Array.from(new Set([
         ...liveRecordActionTaskReferences.taskIds,
-        ...visibleTaskIds,
+        ...taskAssignmentTaskIds,
+      ]));
+      const taskIdsToRefresh = Array.from(new Set([
+        ...explicitTaskIds,
+        ...scopedVisibleTaskIds,
       ]));
       const [context, tasks] = await Promise.all([
-        fetchMaestroInstanceContext(sdk, selectedInstanceId, selectedMaestroFolderKey).catch(() => null),
+        fetchMaestroInstanceContext(sdk, requestInstanceId, selectedMaestroFolderKey).catch(() => null),
         findPendingTasksForInstance(
           sdk,
-          selectedInstanceId,
-          liveRecordActionTaskReferences.instanceIds,
-          taskIdsToRefresh,
+          requestInstanceId,
+          {
+            caseNumber: requestCaseNumber,
+            relatedInstanceIds: liveRecordActionTaskReferences.instanceIds,
+            explicitTaskIds,
+            refreshTaskIds: taskIdsToRefresh,
+          },
         ),
       ]);
+
+      if (
+        liveTasksScopeRef.current.caseId !== requestCaseId
+        || liveTasksScopeRef.current.instanceId !== requestInstanceId
+      ) {
+        return;
+      }
+
       setLiveMaestroContext(context);
-      setLiveTasks((currentTasks) => (
-        preserveVisibleTasks
+      setLiveTasks((currentTasks) => {
+        const nextTasks = preserveVisibleTasks
           ? mergeVisibleLiveTasks(currentTasks, tasks)
-          : tasks
-      ));
+          : tasks;
+        liveTasksRef.current = nextTasks;
+        liveTasksScopeRef.current = { caseId: requestCaseId, instanceId: requestInstanceId };
+        return nextTasks;
+      });
       setLiveTaskStatus('ready');
     } catch (error) {
       const message = getErrorMessage(error);
-      setLiveTasks((currentTasks) => (
-        preserveVisibleTasks && currentTasks.length > 0
+      setLiveTasks((currentTasks) => {
+        const nextTasks = preserveVisibleTasks && currentTasks.length > 0
           ? currentTasks
-          : []
-      ));
+          : [];
+        liveTasksRef.current = nextTasks;
+        liveTasksScopeRef.current = { caseId: requestCaseId, instanceId: requestInstanceId };
+        return nextTasks;
+      });
       setLiveTaskError(message);
       setLiveTaskStatus('error');
     }
-  }, [canUseUiPath, sdk, selectedInstanceId, selectedMaestroFolderKey, liveRecordActionTaskReferences]);
+  }, [canUseUiPath, sdk, selectedCase.id, selectedCase.mybNumber, selectedInstanceId, selectedMaestroFolderKey, liveRecordActionTaskReferences]);
 
   useEffect(() => {
     void refreshLiveRecords();
@@ -3710,11 +3796,13 @@ function App() {
   }, [liveTasks]);
 
   useEffect(() => {
+    liveTasksRef.current = [];
+    liveTasksScopeRef.current = { caseId: selectedCase.id, instanceId: selectedInstanceId || null };
     setLiveTasks([]);
     setLiveMaestroContext(null);
     setLiveTaskError(null);
     setLiveTaskStatus(selectedInstanceId ? 'loading' : 'idle');
-  }, [selectedInstanceId]);
+  }, [selectedCase.id, selectedInstanceId]);
 
   useEffect(() => {
     void refreshLiveTasks({ preserveVisibleTasks: true });
@@ -3792,8 +3880,8 @@ function App() {
 
   const handleOpenMaestro = () => {
     const url = selectedInstanceId
-      ? buildMaestroInstanceUrl(selectedInstanceId)
-      : buildMaestroProcessUrl();
+      ? buildMaestroInstanceUrl(selectedInstanceId, selectedMaestroFolderKey)
+      : buildMaestroProcessUrl(selectedMaestroFolderKey);
 
     window.open(url, '_blank', 'noopener,noreferrer');
     appendAuditEvent(
@@ -3814,15 +3902,26 @@ function App() {
       || null;
   };
 
+  const getCaseMaestroLinkContext = (caseItem: BenefitCase) => {
+    const liveRecord = findMatchingLiveRecord(liveRecords, caseItem);
+
+    return {
+      folderKey: getLiveRecordFolderKey(liveRecord),
+      instanceId: getLiveRecordInstanceId(liveRecord)
+        || startedInstanceByCase[caseItem.id]
+        || null,
+    };
+  };
+
   const handleOpenMaestroForCase = (caseItem: BenefitCase, relatedScreen: string) => {
-    const instanceId = getCaseMaestroInstanceId(caseItem);
+    const { folderKey, instanceId } = getCaseMaestroLinkContext(caseItem);
 
     if (!instanceId) {
       showToast(`No Maestro instance is linked to ${caseItem.mybNumber} yet.`, 'warning');
       return;
     }
 
-    window.open(buildMaestroInstanceUrl(instanceId), '_blank', 'noopener,noreferrer');
+    window.open(buildMaestroInstanceUrl(instanceId, folderKey), '_blank', 'noopener,noreferrer');
     appendAuditEvent(
       caseItem.id,
       'Maestro Instance Opened',

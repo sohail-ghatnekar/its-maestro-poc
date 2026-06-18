@@ -25,6 +25,7 @@ import {
 import type { ActionAppDefinition, LiveActionAppTab } from '../config/uipath';
 
 export type LiveCaseRecord = EntityRecord;
+export type LiveTaskAssignmentRecord = EntityRecord;
 
 export type CaseStartInput = {
   caseIn: {
@@ -248,6 +249,9 @@ const recordFolderKeys = [
 ];
 
 const recordFolderKeyKeys = [
+  'folderId',
+  'FolderID',
+  'FolderId',
   'folderKey',
   'FolderKey',
   'orchestratorFolderKey',
@@ -329,6 +333,16 @@ const recordSubprocessInstanceKeys = [
   'CP4InstanceId',
   'ExternalValidationMaestroInstanceId',
   'ExternalValidationProcessInstanceId',
+  'BudgetMaestroInstanceId',
+  'BudgetProcessInstanceId',
+  'ReviewBudgetMaestroInstanceId',
+  'ReviewBudgetProcessInstanceId',
+  'WorkerFinalReviewMaestroInstanceId',
+  'WorkerFinalReviewProcessInstanceId',
+  'FinalReviewMaestroInstanceId',
+  'FinalReviewProcessInstanceId',
+  'SupervisorReviewMaestroInstanceId',
+  'SupervisorReviewProcessInstanceId',
 ] as const;
 
 const recordActionTaskIdKeys = [
@@ -350,7 +364,46 @@ const recordActionTaskIdKeys = [
   'CP4TaskId',
   'ExternalValidationActionTaskId',
   'ExternalValidationTaskId',
+  'BudgetActionTaskId',
+  'BudgetTaskId',
+  'ReviewBudgetActionTaskId',
+  'ReviewBudgetTaskId',
+  'WorkerFinalReviewActionTaskId',
+  'WorkerFinalReviewTaskId',
+  'FinalReviewActionTaskId',
+  'FinalReviewTaskId',
+  'SupervisorReviewActionTaskId',
+  'SupervisorReviewTaskId',
 ] as const;
+
+const taskAssignmentTaskIdKeys = [
+  'TaskId',
+  'TaskID',
+  'taskId',
+  'taskID',
+  'task_id',
+  'Task Id',
+] as const;
+
+const taskAssignmentMaestroProcessIdKeys = [
+  'MaestroProcessId',
+  'MaestroProcessID',
+  'maestroProcessId',
+  'maestroProcessID',
+  'maestroProcessInstanceId',
+  'MaestroProcessInstanceId',
+  'processInstanceId',
+  'ProcessInstanceId',
+  'instanceId',
+  'InstanceId',
+] as const;
+
+type FindTasksForInstanceOptions = {
+  caseNumber?: string | null;
+  explicitTaskIds?: number[];
+  refreshTaskIds?: number[];
+  relatedInstanceIds?: string[];
+};
 
 function extractItems<T>(response: MaybePaged<T>): T[] {
   if (Array.isArray(response)) {
@@ -370,6 +423,10 @@ function normalizeText(value: unknown): string {
 
 function normalizeId(value: unknown): string {
   return typeof value === 'string' ? value.trim().replace(/-/g, '').toLowerCase() : '';
+}
+
+function normalizeCaseReference(value: unknown): string {
+  return typeof value === 'string' ? value.trim().replace(/[\s_-]+/g, '').toLowerCase() : '';
 }
 
 function idMatches(candidate: unknown, target: string): boolean {
@@ -489,6 +546,10 @@ function recordKeyLooksLikeSubprocessInstance(key: string): boolean {
     'cin',
     'external',
     'validation',
+    'budget',
+    'final',
+    'supervisor',
+    'review',
   ].some((term) => normalizedKey.includes(term));
 
   return hasInstanceTerm && hasSubprocessTerm;
@@ -511,6 +572,10 @@ function recordKeyLooksLikeActionTaskId(key: string): boolean {
     'cin',
     'external',
     'validation',
+    'budget',
+    'final',
+    'supervisor',
+    'review',
   ].some((term) => normalizedKey.includes(term));
 
   return hasTaskTerm && hasIdTerm && hasActionTerm;
@@ -1276,6 +1341,80 @@ export async function fetchLiveCaseRecords(sdk: UiPath): Promise<LiveCaseRecord[
   return records.slice().sort(compareLiveRecordsNewestFirst);
 }
 
+export async function fetchTaskAssignmentRecords(sdk: UiPath): Promise<LiveTaskAssignmentRecord[]> {
+  const entities = new Entities(sdk);
+  const response = await entities.getAllRecords(IES_WORKFLOW_CONFIG.assignmentDataFabric.taskAssignment.entityId, {
+    pageSize: 500,
+    expansionLevel: 1,
+  });
+
+  return extractItems(response);
+}
+
+function getTaskAssignmentTaskId(record: LiveTaskAssignmentRecord): number | null {
+  const recordSource = record as Record<string, unknown>;
+
+  for (const key of taskAssignmentTaskIdKeys) {
+    const taskId = extractTaskIdsFromUnknown(recordSource[key])[0];
+
+    if (taskId) {
+      return taskId;
+    }
+  }
+
+  return null;
+}
+
+function getTaskAssignmentMaestroProcessId(record: LiveTaskAssignmentRecord): string | null {
+  const recordSource = record as Record<string, unknown>;
+
+  for (const key of taskAssignmentMaestroProcessIdKeys) {
+    const value = recordSource[key];
+    const extractedId = extractInstanceIdsFromUnknown(value).find(isUsableMaestroInstanceId);
+
+    if (extractedId) {
+      return extractedId;
+    }
+
+    if (typeof value === 'string' && isUsableMaestroInstanceId(value.trim())) {
+      return value.trim();
+    }
+  }
+
+  return null;
+}
+
+export function getTaskAssignmentTaskIdsForInstances(
+  records: LiveTaskAssignmentRecord[],
+  instanceIds: string[],
+): number[] {
+  const normalizedInstanceIds = uniqueStrings(instanceIds.filter(Boolean));
+  const taskIds = new Set<number>();
+
+  if (normalizedInstanceIds.length === 0) {
+    return [];
+  }
+
+  for (const record of records) {
+    const maestroProcessId = getTaskAssignmentMaestroProcessId(record);
+    const taskId = getTaskAssignmentTaskId(record);
+
+    if (!maestroProcessId || !taskId) {
+      continue;
+    }
+
+    const matchesCaseInstance = normalizedInstanceIds.some((instanceId) =>
+      idMatches(maestroProcessId, instanceId) || idMatches(instanceId, maestroProcessId)
+    );
+
+    if (matchesCaseInstance) {
+      taskIds.add(taskId);
+    }
+  }
+
+  return Array.from(taskIds).sort((left, right) => left - right);
+}
+
 export function findMatchingLiveRecord(records: LiveCaseRecord[], caseItem: BenefitCase): LiveCaseRecord | null {
   const target = normalizeText(caseItem.mybNumber);
 
@@ -1499,6 +1638,47 @@ function taskBelongsToAnyInstance(task: TaskGetResponse, instanceIds: string[]):
   return instanceIds.some((instanceId) => taskBelongsToInstance(task, instanceId));
 }
 
+function taskReferencesCaseNumber(task: TaskGetResponse, caseNumber: string | null | undefined): boolean {
+  const normalizedCaseNumber = normalizeCaseReference(caseNumber);
+
+  if (!normalizedCaseNumber) {
+    return false;
+  }
+
+  const taskWithMetadata = task as TaskWithRuntimeMetadata;
+  const elementRunToken = taskWithMetadata.appTasksMetadata?.fpsContext?.elementRunToken;
+  const candidates = [
+    task.title,
+    task.action,
+    task.actionLabel,
+    task.externalTag,
+    task.taskSource?.sourceName,
+    task.taskSource?.sourceId,
+    taskWithMetadata.appTasksMetadata?.appId,
+    taskWithMetadata.taskSource?.jobId,
+    taskWithMetadata.taskSource?.taskSourceMetadata?.instanceId,
+    taskWithMetadata.taskSource?.taskSourceMetadata?.traceId,
+    elementRunToken?.instanceId,
+    elementRunToken?.runId,
+    elementRunToken?.elementId,
+    stringifyTaskData(task),
+    ...(((task.tags || []) as RuntimeTag[]).flatMap((tag) => [tag.value, tag.displayName, tag.displayValue, tag.name])),
+  ];
+
+  return candidates.some((candidate) => normalizeCaseReference(candidate).includes(normalizedCaseNumber));
+}
+
+function taskMatchesCaseContext(
+  task: TaskGetResponse,
+  caseNumber: string | null | undefined,
+  relatedInstanceIds: string[],
+  trustedTaskIds: Set<number> = new Set(),
+): boolean {
+  return trustedTaskIds.has(task.id)
+    || taskBelongsToAnyInstance(task, relatedInstanceIds)
+    || taskReferencesCaseNumber(task, caseNumber);
+}
+
 function sortTasksNewestFirst(tasks: TaskGetResponse[]): TaskGetResponse[] {
   return tasks.slice().sort((left, right) => Date.parse(right.createdTime) - Date.parse(left.createdTime));
 }
@@ -1636,31 +1816,41 @@ async function findPendingFolderTasks(tasks: Tasks): Promise<TaskGetResponse[]> 
 export async function findPendingTasksForInstance(
   sdk: UiPath,
   instanceId: string,
-  knownRelatedInstanceIds: string[] = [],
-  knownTaskIds: number[] = [],
+  options: FindTasksForInstanceOptions = {},
 ): Promise<LiveTaskSummary[]> {
   const caseInstances = new CaseInstances(sdk);
   const tasks = new Tasks(sdk);
+  const {
+    caseNumber,
+    explicitTaskIds = [],
+    refreshTaskIds = [],
+    relatedInstanceIds: knownRelatedInstanceIds = [],
+  } = options;
 
   const caseTasks = await caseInstances.getActionTasks(instanceId, { pageSize: 50 })
     .then((response) => getVisibleTasks(extractItems(response)))
     .catch(() => []);
 
-  const [enrichedCaseTasks, recordTaskMatches, childInstanceIds] = await Promise.all([
+  const [enrichedCaseTasks, explicitTaskMatches, refreshTaskMatches, childInstanceIds] = await Promise.all([
     caseTasks.length > 0 ? enrichTasks(tasks, caseTasks) : Promise.resolve([]),
-    findPendingTasksByIds(tasks, knownTaskIds),
+    findPendingTasksByIds(tasks, explicitTaskIds),
+    findPendingTasksByIds(tasks, refreshTaskIds),
     fetchChildInstanceIds(sdk, instanceId),
   ]);
   const relatedInstanceIds = uniqueStrings([instanceId, ...knownRelatedInstanceIds, ...childInstanceIds]);
+  const trustedTaskIds = new Set([...explicitTaskIds, ...refreshTaskIds]);
   const folderTasks = await findPendingFolderTasks(tasks);
   const enrichedTasks = await enrichTasks(tasks, folderTasks);
   const instanceTasks = getVisibleTasks(enrichedTasks)
-    .filter((task) => taskBelongsToAnyInstance(task, relatedInstanceIds))
+    .filter((task) => taskMatchesCaseContext(task, caseNumber, relatedInstanceIds))
     .sort((left, right) => Date.parse(right.createdTime) - Date.parse(left.createdTime));
+  const refreshedVisibleTasks = getVisibleTasks(refreshTaskMatches)
+    .filter((task) => taskMatchesCaseContext(task, caseNumber, relatedInstanceIds, trustedTaskIds));
 
   return normalizeTaskResults([
     ...enrichedCaseTasks,
-    ...recordTaskMatches,
+    ...explicitTaskMatches,
+    ...refreshedVisibleTasks,
     ...instanceTasks,
   ]);
 }
@@ -1724,10 +1914,40 @@ export function convertTaskLinkToEmbedUrl(taskLink: string): string {
   return `${url.origin}/embed_/${orgId}/${tenantId}/${currentTaskPath}`;
 }
 
-export function buildMaestroProcessUrl(): string {
-  return `${IES_WORKFLOW_CONFIG.portalBaseUrl}/${IES_WORKFLOW_CONFIG.orgId}/${IES_WORKFLOW_CONFIG.tenantId}/maestro_/processes/${IES_WORKFLOW_CONFIG.maestroProcessKey}?folderKey=${IES_WORKFLOW_CONFIG.maestroFolderKey}`;
+function buildMaestroPortalQuery(folderKey: string): string {
+  const params = new URLSearchParams();
+
+  if (folderKey.trim()) {
+    params.set('folderKey', folderKey.trim());
+  }
+
+  return params.toString();
 }
 
-export function buildMaestroInstanceUrl(instanceId: string): string {
-  return `${IES_WORKFLOW_CONFIG.portalBaseUrl}/${IES_WORKFLOW_CONFIG.orgId}/${IES_WORKFLOW_CONFIG.tenantId}/maestro_/processes/${IES_WORKFLOW_CONFIG.maestroProcessKey}/instances/${instanceId}?folderKey=${IES_WORKFLOW_CONFIG.maestroFolderKey}`;
+function buildMaestroPortalPath(path: string, folderKey = IES_WORKFLOW_CONFIG.maestroFolderKey): string {
+  const query = buildMaestroPortalQuery(folderKey);
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+
+  return `${IES_WORKFLOW_CONFIG.portalBaseUrl}/${IES_WORKFLOW_CONFIG.orgName}/${IES_WORKFLOW_CONFIG.tenantName}/maestro_${normalizedPath}${query ? `?${query}` : ''}`;
+}
+
+function normalizeMaestroUrlInstanceId(instanceId: string): string {
+  return extractInstanceIdsFromText(instanceId).find(isUsableMaestroInstanceId)
+    || instanceId.trim().replace(/@+$/g, '');
+}
+
+export function buildMaestroProcessUrl(folderKey = IES_WORKFLOW_CONFIG.maestroFolderKey): string {
+  return buildMaestroPortalPath(`/processes/${IES_WORKFLOW_CONFIG.maestroProcessKey}`, folderKey);
+}
+
+export function buildMaestroInstanceUrl(
+  instanceId: string,
+  folderKey = IES_WORKFLOW_CONFIG.maestroFolderKey,
+): string {
+  const normalizedInstanceId = normalizeMaestroUrlInstanceId(instanceId);
+
+  return buildMaestroPortalPath(
+    `/processes/${IES_WORKFLOW_CONFIG.maestroProcessKey}/instances/${normalizedInstanceId}`,
+    folderKey,
+  );
 }
