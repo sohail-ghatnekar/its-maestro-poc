@@ -1,0 +1,12 @@
+{
+  "documentAvailable": true,
+  "myBNumberPresent": true,
+  "namePresent": true,
+  "addressPresent": true,
+  "noFixedAddressFlag": false,
+  "signaturePresent": true,
+  "signatureDatePresent": true,
+  "countyKnown": true,
+  "snapProgramSelected": true,
+  "applicantEmailPresent": true
+}

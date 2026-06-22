@@ -1,0 +1,12 @@
+{
+  "version": "1.0",
+  "id": "ExactMatchEvaluator",
+  "evaluatorTypeId": "uipath-exact-match",
+  "description": "Exact output match for deterministic intake decisions.",
+  "evaluatorConfig": {
+    "name": "ExactMatchEvaluator",
+    "targetOutputKey": "*",
+    "ignoreCase": false,
+    "negated": false
+  }
+}

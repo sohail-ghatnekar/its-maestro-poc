@@ -1,9 +1,9 @@
 {
-  "name": "ies-case-management-poc",
-  "displayName": "ies-case-management-poc",
-  "version": "1.0.20260618.1",
-  "description": "IES case management dashboard",
+  "name": "ies-maestro-poc",
+  "displayName": "ies-maestro-poc",
+  "version": "1.0.6",
+  "description": "IES Maestro case management coded app",
   "author": "Sohail Ghatnekar",
   "contentType": "webapp",
-  "createdAt": "2026-06-18T20:23:04.690Z"
+  "createdAt": "2026-06-22T17:46:39.982Z"
 }

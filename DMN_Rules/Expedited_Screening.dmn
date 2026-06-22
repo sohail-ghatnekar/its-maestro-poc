@@ -1,0 +1,240 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/"
+             xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/"
+             xmlns:di="http://www.omg.org/spec/DMN/20180521/DI/"
+             id="definitions_IESCLIBuild_Expedited_Screening"
+             name="IESCLIBuild Expedited Screening"
+             namespace="http://uipath.com/iesclibuild/dmn/expedited-screening"
+             exporter="ChatGPT"
+             exporterVersion="1.0">
+
+  <inputData id="input_filingAccepted" name="filingAccepted"><variable id="var_filingAccepted" name="filingAccepted" typeRef="boolean"/></inputData>
+  <inputData id="input_expeditedInputsComplete" name="expeditedInputsComplete"><variable id="var_expeditedInputsComplete" name="expeditedInputsComplete" typeRef="boolean"/></inputData>
+  <inputData id="input_priorExpeditedVerificationOutstanding" name="priorExpeditedVerificationOutstanding"><variable id="var_priorExpeditedVerificationOutstanding" name="priorExpeditedVerificationOutstanding" typeRef="boolean"/></inputData>
+  <inputData id="input_destituteMigrantSeasonalFarmworker" name="destituteMigrantSeasonalFarmworker"><variable id="var_destituteMigrantSeasonalFarmworker" name="destituteMigrantSeasonalFarmworker" typeRef="boolean"/></inputData>
+  <inputData id="input_grossMonthlyIncome" name="grossMonthlyIncome"><variable id="var_grossMonthlyIncome" name="grossMonthlyIncome" typeRef="number"/></inputData>
+  <inputData id="input_liquidResources" name="liquidResources"><variable id="var_liquidResources" name="liquidResources" typeRef="number"/></inputData>
+  <inputData id="input_homelessHousehold" name="homelessHousehold"><variable id="var_homelessHousehold" name="homelessHousehold" typeRef="boolean"/></inputData>
+  <inputData id="input_shelterAndUtilityCosts" name="shelterAndUtilityCosts"><variable id="var_shelterAndUtilityCosts" name="shelterAndUtilityCosts" typeRef="number"/></inputData>
+
+  <decision id="decision_expedited_screening" name="Expedited Screening">
+    <informationRequirement><requiredInput href="#input_filingAccepted"/></informationRequirement>
+    <informationRequirement><requiredInput href="#input_expeditedInputsComplete"/></informationRequirement>
+    <informationRequirement><requiredInput href="#input_priorExpeditedVerificationOutstanding"/></informationRequirement>
+    <informationRequirement><requiredInput href="#input_destituteMigrantSeasonalFarmworker"/></informationRequirement>
+    <informationRequirement><requiredInput href="#input_grossMonthlyIncome"/></informationRequirement>
+    <informationRequirement><requiredInput href="#input_liquidResources"/></informationRequirement>
+    <informationRequirement><requiredInput href="#input_homelessHousehold"/></informationRequirement>
+    <informationRequirement><requiredInput href="#input_shelterAndUtilityCosts"/></informationRequirement>
+
+    <decisionTable id="decisionTable_expedited_screening" hitPolicy="FIRST">
+      <input id="inputClause_filingAccepted" label="Filing accepted">
+        <inputExpression id="inputExpr_filingAccepted" typeRef="boolean"><text>filingAccepted</text></inputExpression>
+      </input>
+      <input id="inputClause_expeditedInputsComplete" label="Expedited inputs complete">
+        <inputExpression id="inputExpr_expeditedInputsComplete" typeRef="boolean"><text>expeditedInputsComplete</text></inputExpression>
+      </input>
+      <input id="inputClause_priorExpeditedVerificationOutstanding" label="Prior expedited verification outstanding">
+        <inputExpression id="inputExpr_priorExpeditedVerificationOutstanding" typeRef="boolean"><text>priorExpeditedVerificationOutstanding</text></inputExpression>
+      </input>
+      <input id="inputClause_destituteMigrantSeasonalFarmworker" label="Destitute migrant/seasonal farmworker">
+        <inputExpression id="inputExpr_destituteMigrantSeasonalFarmworker" typeRef="boolean"><text>destituteMigrantSeasonalFarmworker</text></inputExpression>
+      </input>
+      <input id="inputClause_grossMonthlyIncome" label="Gross monthly income">
+        <inputExpression id="inputExpr_grossMonthlyIncome" typeRef="number"><text>grossMonthlyIncome</text></inputExpression>
+      </input>
+      <input id="inputClause_liquidResources" label="Liquid resources">
+        <inputExpression id="inputExpr_liquidResources" typeRef="number"><text>liquidResources</text></inputExpression>
+      </input>
+      <input id="inputClause_homelessHousehold" label="Homeless household">
+        <inputExpression id="inputExpr_homelessHousehold" typeRef="boolean"><text>homelessHousehold</text></inputExpression>
+      </input>
+      <input id="inputClause_incomeResourcesMinusShelter" label="Income + resources - shelter/utility costs">
+        <inputExpression id="inputExpr_incomeResourcesMinusShelter" typeRef="number"><text>grossMonthlyIncome + liquidResources - shelterAndUtilityCosts</text></inputExpression>
+      </input>
+
+      <output id="output_expeditedDecision" name="expeditedDecision" typeRef="string"/>
+      <output id="output_expeditedFlag" name="expeditedFlag" typeRef="boolean"/>
+      <output id="output_slaDays" name="slaDays" typeRef="number"/>
+      <output id="output_priority" name="priority" typeRef="string"/>
+      <output id="output_nextStage" name="nextStage" typeRef="string"/>
+      <output id="output_recommendedAction" name="recommendedAction" typeRef="string"/>
+      <output id="output_reasonCode" name="reasonCode" typeRef="string"/>
+      <output id="output_policyRef" name="policyRef" typeRef="string"/>
+
+      <rule id="expedited_rule_001_wait_for_intake">
+        <description>Do not run expedited determination before the filing is accepted.</description>
+        <inputEntry id="exp_r001_i1"><text>false</text></inputEntry>
+        <inputEntry id="exp_r001_i2"><text>-</text></inputEntry>
+        <inputEntry id="exp_r001_i3"><text>-</text></inputEntry>
+        <inputEntry id="exp_r001_i4"><text>-</text></inputEntry>
+        <inputEntry id="exp_r001_i5"><text>-</text></inputEntry>
+        <inputEntry id="exp_r001_i6"><text>-</text></inputEntry>
+        <inputEntry id="exp_r001_i7"><text>-</text></inputEntry>
+        <inputEntry id="exp_r001_i8"><text>-</text></inputEntry>
+        <outputEntry id="exp_r001_o1"><text>"EXPEDITED_WAIT_FOR_INTAKE"</text></outputEntry>
+        <outputEntry id="exp_r001_o2"><text>false</text></outputEntry>
+        <outputEntry id="exp_r001_o3"><text>0</text></outputEntry>
+        <outputEntry id="exp_r001_o4"><text>"High"</text></outputEntry>
+        <outputEntry id="exp_r001_o5"><text>"Intake"</text></outputEntry>
+        <outputEntry id="exp_r001_o6"><text>"Complete intake filing review before expedited screening."</text></outputEntry>
+        <outputEntry id="exp_r001_o7"><text>"EXPEDITED_INTAKE_NOT_ACCEPTED"</text></outputEntry>
+        <outputEntry id="exp_r001_o8"><text>"SNAPSB Section 4 Expedited Screening"</text></outputEntry>
+      </rule>
+
+      <rule id="expedited_rule_002_inputs_missing">
+        <description>Some financial/resource/shelter inputs needed for expedited screening are missing.</description>
+        <inputEntry id="exp_r002_i1"><text>true</text></inputEntry>
+        <inputEntry id="exp_r002_i2"><text>false</text></inputEntry>
+        <inputEntry id="exp_r002_i3"><text>-</text></inputEntry>
+        <inputEntry id="exp_r002_i4"><text>-</text></inputEntry>
+        <inputEntry id="exp_r002_i5"><text>-</text></inputEntry>
+        <inputEntry id="exp_r002_i6"><text>-</text></inputEntry>
+        <inputEntry id="exp_r002_i7"><text>-</text></inputEntry>
+        <inputEntry id="exp_r002_i8"><text>-</text></inputEntry>
+        <outputEntry id="exp_r002_o1"><text>"EXPEDITED_UNDETERMINED"</text></outputEntry>
+        <outputEntry id="exp_r002_o2"><text>false</text></outputEntry>
+        <outputEntry id="exp_r002_o3"><text>0</text></outputEntry>
+        <outputEntry id="exp_r002_o4"><text>"High"</text></outputEntry>
+        <outputEntry id="exp_r002_o5"><text>"Interview"</text></outputEntry>
+        <outputEntry id="exp_r002_o6"><text>"Worker must complete expedited screening inputs."</text></outputEntry>
+        <outputEntry id="exp_r002_o7"><text>"EXPEDITED_INPUTS_MISSING"</text></outputEntry>
+        <outputEntry id="exp_r002_o8"><text>"SNAPSB Section 4 Expedited Screening"</text></outputEntry>
+      </rule>
+
+      <rule id="expedited_rule_003_prior_verification">
+        <description>Prior expedited postponed verification is outstanding and should be reviewed by a worker.</description>
+        <inputEntry id="exp_r003_i1"><text>true</text></inputEntry>
+        <inputEntry id="exp_r003_i2"><text>true</text></inputEntry>
+        <inputEntry id="exp_r003_i3"><text>true</text></inputEntry>
+        <inputEntry id="exp_r003_i4"><text>-</text></inputEntry>
+        <inputEntry id="exp_r003_i5"><text>-</text></inputEntry>
+        <inputEntry id="exp_r003_i6"><text>-</text></inputEntry>
+        <inputEntry id="exp_r003_i7"><text>-</text></inputEntry>
+        <inputEntry id="exp_r003_i8"><text>-</text></inputEntry>
+        <outputEntry id="exp_r003_o1"><text>"EXPEDITED_VERIFICATION_REVIEW"</text></outputEntry>
+        <outputEntry id="exp_r003_o2"><text>false</text></outputEntry>
+        <outputEntry id="exp_r003_o3"><text>0</text></outputEntry>
+        <outputEntry id="exp_r003_o4"><text>"High"</text></outputEntry>
+        <outputEntry id="exp_r003_o5"><text>"Interview"</text></outputEntry>
+        <outputEntry id="exp_r003_o6"><text>"Review prior pended verification before expedited action."</text></outputEntry>
+        <outputEntry id="exp_r003_o7"><text>"EXPEDITED_PRIOR_VERIFICATION_OUTSTANDING"</text></outputEntry>
+        <outputEntry id="exp_r003_o8"><text>"SNAPSB Section 4 Expedited Processing"</text></outputEntry>
+      </rule>
+
+      <rule id="expedited_rule_004_migrant_seasonal">
+        <description>Destitute migrant/seasonal farmworker household with liquid resources at or below threshold.</description>
+        <inputEntry id="exp_r004_i1"><text>true</text></inputEntry>
+        <inputEntry id="exp_r004_i2"><text>true</text></inputEntry>
+        <inputEntry id="exp_r004_i3"><text>false</text></inputEntry>
+        <inputEntry id="exp_r004_i4"><text>true</text></inputEntry>
+        <inputEntry id="exp_r004_i5"><text>-</text></inputEntry>
+        <inputEntry id="exp_r004_i6"><text>&lt;= 100</text></inputEntry>
+        <inputEntry id="exp_r004_i7"><text>-</text></inputEntry>
+        <inputEntry id="exp_r004_i8"><text>-</text></inputEntry>
+        <outputEntry id="exp_r004_o1"><text>"EXPEDITED_MIGRANT_SEASONAL"</text></outputEntry>
+        <outputEntry id="exp_r004_o2"><text>true</text></outputEntry>
+        <outputEntry id="exp_r004_o3"><text>7</text></outputEntry>
+        <outputEntry id="exp_r004_o4"><text>"Critical"</text></outputEntry>
+        <outputEntry id="exp_r004_o5"><text>"Interview"</text></outputEntry>
+        <outputEntry id="exp_r004_o6"><text>"Prioritize same-day expedited interview and processing."</text></outputEntry>
+        <outputEntry id="exp_r004_o7"><text>"EXPEDITED_DESTITUTE_MIGRANT_SEASONAL"</text></outputEntry>
+        <outputEntry id="exp_r004_o8"><text>"SNAPSB Section 4 Expedited Criteria"</text></outputEntry>
+      </rule>
+
+      <rule id="expedited_rule_005_low_income_resource">
+        <description>Gross monthly income less than $150 and liquid resources not exceeding $100.</description>
+        <inputEntry id="exp_r005_i1"><text>true</text></inputEntry>
+        <inputEntry id="exp_r005_i2"><text>true</text></inputEntry>
+        <inputEntry id="exp_r005_i3"><text>false</text></inputEntry>
+        <inputEntry id="exp_r005_i4"><text>-</text></inputEntry>
+        <inputEntry id="exp_r005_i5"><text>&lt; 150</text></inputEntry>
+        <inputEntry id="exp_r005_i6"><text>&lt;= 100</text></inputEntry>
+        <inputEntry id="exp_r005_i7"><text>-</text></inputEntry>
+        <inputEntry id="exp_r005_i8"><text>-</text></inputEntry>
+        <outputEntry id="exp_r005_o1"><text>"EXPEDITED_LOW_INCOME_RESOURCE"</text></outputEntry>
+        <outputEntry id="exp_r005_o2"><text>true</text></outputEntry>
+        <outputEntry id="exp_r005_o3"><text>7</text></outputEntry>
+        <outputEntry id="exp_r005_o4"><text>"Critical"</text></outputEntry>
+        <outputEntry id="exp_r005_o5"><text>"Interview"</text></outputEntry>
+        <outputEntry id="exp_r005_o6"><text>"Prioritize same-day expedited interview and processing."</text></outputEntry>
+        <outputEntry id="exp_r005_o7"><text>"EXPEDITED_GROSS_UNDER_150_RESOURCES_UNDER_100"</text></outputEntry>
+        <outputEntry id="exp_r005_o8"><text>"SNAPSB Section 4 Expedited Criteria"</text></outputEntry>
+      </rule>
+
+      <rule id="expedited_rule_006_homeless_household">
+        <description>All household members are homeless; route to expedited priority review.</description>
+        <inputEntry id="exp_r006_i1"><text>true</text></inputEntry>
+        <inputEntry id="exp_r006_i2"><text>true</text></inputEntry>
+        <inputEntry id="exp_r006_i3"><text>false</text></inputEntry>
+        <inputEntry id="exp_r006_i4"><text>-</text></inputEntry>
+        <inputEntry id="exp_r006_i5"><text>-</text></inputEntry>
+        <inputEntry id="exp_r006_i6"><text>-</text></inputEntry>
+        <inputEntry id="exp_r006_i7"><text>true</text></inputEntry>
+        <inputEntry id="exp_r006_i8"><text>-</text></inputEntry>
+        <outputEntry id="exp_r006_o1"><text>"EXPEDITED_HOMELESS_HOUSEHOLD"</text></outputEntry>
+        <outputEntry id="exp_r006_o2"><text>true</text></outputEntry>
+        <outputEntry id="exp_r006_o3"><text>7</text></outputEntry>
+        <outputEntry id="exp_r006_o4"><text>"Critical"</text></outputEntry>
+        <outputEntry id="exp_r006_o5"><text>"Interview"</text></outputEntry>
+        <outputEntry id="exp_r006_o6"><text>"Prioritize expedited processing for homeless household."</text></outputEntry>
+        <outputEntry id="exp_r006_o7"><text>"EXPEDITED_HOMELESS"</text></outputEntry>
+        <outputEntry id="exp_r006_o8"><text>"SNAPSB Glossary Expedited Application Processing Service"</text></outputEntry>
+      </rule>
+
+      <rule id="expedited_rule_007_shelter_cost">
+        <description>Gross monthly income plus liquid resources is less than rent/mortgage plus applicable utility allowance/costs.</description>
+        <inputEntry id="exp_r007_i1"><text>true</text></inputEntry>
+        <inputEntry id="exp_r007_i2"><text>true</text></inputEntry>
+        <inputEntry id="exp_r007_i3"><text>false</text></inputEntry>
+        <inputEntry id="exp_r007_i4"><text>-</text></inputEntry>
+        <inputEntry id="exp_r007_i5"><text>-</text></inputEntry>
+        <inputEntry id="exp_r007_i6"><text>-</text></inputEntry>
+        <inputEntry id="exp_r007_i7"><text>-</text></inputEntry>
+        <inputEntry id="exp_r007_i8"><text>&lt; 0</text></inputEntry>
+        <outputEntry id="exp_r007_o1"><text>"EXPEDITED_SHELTER_COST"</text></outputEntry>
+        <outputEntry id="exp_r007_o2"><text>true</text></outputEntry>
+        <outputEntry id="exp_r007_o3"><text>7</text></outputEntry>
+        <outputEntry id="exp_r007_o4"><text>"Critical"</text></outputEntry>
+        <outputEntry id="exp_r007_o5"><text>"Interview"</text></outputEntry>
+        <outputEntry id="exp_r007_o6"><text>"Prioritize same-day expedited interview and processing."</text></outputEntry>
+        <outputEntry id="exp_r007_o7"><text>"EXPEDITED_INCOME_RESOURCES_LESS_THAN_SHELTER"</text></outputEntry>
+        <outputEntry id="exp_r007_o8"><text>"SNAPSB Section 4 Expedited Criteria"</text></outputEntry>
+      </rule>
+
+      <rule id="expedited_rule_008_standard_processing">
+        <description>No expedited criteria were met.</description>
+        <inputEntry id="exp_r008_i1"><text>true</text></inputEntry>
+        <inputEntry id="exp_r008_i2"><text>true</text></inputEntry>
+        <inputEntry id="exp_r008_i3"><text>false</text></inputEntry>
+        <inputEntry id="exp_r008_i4"><text>-</text></inputEntry>
+        <inputEntry id="exp_r008_i5"><text>-</text></inputEntry>
+        <inputEntry id="exp_r008_i6"><text>-</text></inputEntry>
+        <inputEntry id="exp_r008_i7"><text>false</text></inputEntry>
+        <inputEntry id="exp_r008_i8"><text>&gt;= 0</text></inputEntry>
+        <outputEntry id="exp_r008_o1"><text>"NOT_EXPEDITED"</text></outputEntry>
+        <outputEntry id="exp_r008_o2"><text>false</text></outputEntry>
+        <outputEntry id="exp_r008_o3"><text>30</text></outputEntry>
+        <outputEntry id="exp_r008_o4"><text>"Normal"</text></outputEntry>
+        <outputEntry id="exp_r008_o5"><text>"Documents"</text></outputEntry>
+        <outputEntry id="exp_r008_o6"><text>"Continue standard SNAP processing."</text></outputEntry>
+        <outputEntry id="exp_r008_o7"><text>"EXPEDITED_CRITERIA_NOT_MET"</text></outputEntry>
+        <outputEntry id="exp_r008_o8"><text>"SNAPSB Normal Processing Standard"</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+
+  <dmndi:DMNDI>
+    <dmndi:DMNDiagram id="DMNDiagram_IESCLIBuild_Expedited_Screening" name="IESCLIBuild Expedited Screening Diagram">
+      <dmndi:DMNShape id="DMNShape_decision_expedited_screening" dmnElementRef="decision_expedited_screening">
+        <dc:Bounds x="420" y="180" width="260" height="90"/>
+      </dmndi:DMNShape>
+      <dmndi:DMNShape id="DMNShape_input_filingAccepted" dmnElementRef="input_filingAccepted"><dc:Bounds x="40" y="40" width="210" height="60"/></dmndi:DMNShape>
+      <dmndi:DMNShape id="DMNShape_input_grossMonthlyIncome" dmnElementRef="input_grossMonthlyIncome"><dc:Bounds x="40" y="115" width="210" height="60"/></dmndi:DMNShape>
+      <dmndi:DMNShape id="DMNShape_input_liquidResources" dmnElementRef="input_liquidResources"><dc:Bounds x="40" y="190" width="210" height="60"/></dmndi:DMNShape>
+      <dmndi:DMNShape id="DMNShape_input_shelterAndUtilityCosts" dmnElementRef="input_shelterAndUtilityCosts"><dc:Bounds x="40" y="265" width="210" height="60"/></dmndi:DMNShape>
+      <dmndi:DMNShape id="DMNShape_input_destituteMigrantSeasonalFarmworker" dmnElementRef="input_destituteMigrantSeasonalFarmworker"><dc:Bounds x="40" y="340" width="260" height="60"/></dmndi:DMNShape>
+    </dmndi:DMNDiagram>
+  </dmndi:DMNDI>
+</definitions>

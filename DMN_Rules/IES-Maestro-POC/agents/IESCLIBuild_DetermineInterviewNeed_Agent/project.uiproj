@@ -1,0 +1,6 @@
+{
+  "ProjectType": "Function",
+  "Name": "determine-interview-need-agent",
+  "Description": "Deterministic UiPath coded agent for Determine Interview Need advisory review",
+  "MainFile": null
+}

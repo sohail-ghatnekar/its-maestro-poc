@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "noEmit": false,
+    "outDir": ".ts-node"
+  },
+  "include": ["scripts", "src/data", "src/types", "src/utils"]
+}

@@ -1326,10 +1326,15 @@ export async function fetchLiveCaseRecords(sdk: UiPath): Promise<LiveCaseRecord[
   try {
     const records = await fetchLiveCaseRecordsFromEntity(sdk);
 
-    if (records.length > 0) {
-      return records.slice().sort(compareLiveRecordsNewestFirst);
-    }
+    return records.slice().sort(compareLiveRecordsNewestFirst);
   } catch (error) {
+    if (
+      !IES_WORKFLOW_CONFIG.dataFabricConnectionFallbackEnabled ||
+      !IES_WORKFLOW_CONFIG.dataFabricConnectionId
+    ) {
+      throw error;
+    }
+
     console.warn(
       `Data Fabric entity read failed; trying ${IES_WORKFLOW_CONFIG.dataFabricConnectionName}.`,
       error,

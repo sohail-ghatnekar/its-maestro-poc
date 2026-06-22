@@ -1,0 +1,177 @@
+{
+    "$schema": "https://cloud.uipath.com/draft/2024-12/entry-point",
+    "$id": "entry-points.json",
+    "entryPoints": [
+        {
+            "filePath": "main",
+            "uniqueId": "1c2e89a7-8242-4623-8ea9-c6325475f124",
+            "type": "function",
+            "input": {
+                "type": "object",
+                "properties": {
+                    "filingAccepted": {
+                        "description": "Whether the intake filing has been accepted.",
+                        "title": "Filingaccepted",
+                        "type": "boolean"
+                    },
+                    "expeditedInputsComplete": {
+                        "description": "Whether all inputs required for expedited screening are complete.",
+                        "title": "Expeditedinputscomplete",
+                        "type": "boolean"
+                    },
+                    "priorExpeditedVerificationOutstanding": {
+                        "description": "Whether prior expedited postponed verification remains outstanding.",
+                        "title": "Priorexpeditedverificationoutstanding",
+                        "type": "boolean"
+                    },
+                    "destituteMigrantSeasonalFarmworker": {
+                        "description": "Whether the household is a destitute migrant or seasonal farmworker household.",
+                        "title": "Destitutemigrantseasonalfarmworker",
+                        "type": "boolean"
+                    },
+                    "grossMonthlyIncome": {
+                        "description": "Household gross monthly income.",
+                        "title": "Grossmonthlyincome",
+                        "type": "number"
+                    },
+                    "liquidResources": {
+                        "description": "Household liquid resources.",
+                        "title": "Liquidresources",
+                        "type": "number"
+                    },
+                    "homelessHousehold": {
+                        "description": "Whether all household members are homeless.",
+                        "title": "Homelesshousehold",
+                        "type": "boolean"
+                    },
+                    "shelterAndUtilityCosts": {
+                        "description": "Monthly shelter and utility costs.",
+                        "title": "Shelterandutilitycosts",
+                        "type": "number"
+                    }
+                },
+                "required": [
+                    "filingAccepted",
+                    "expeditedInputsComplete",
+                    "priorExpeditedVerificationOutstanding",
+                    "destituteMigrantSeasonalFarmworker",
+                    "grossMonthlyIncome",
+                    "liquidResources",
+                    "homelessHousehold",
+                    "shelterAndUtilityCosts"
+                ],
+                "title": "Input"
+            },
+            "output": {
+                "type": "object",
+                "properties": {
+                    "expeditedDecision": {
+                        "description": "Primary expedited screening decision code.",
+                        "title": "Expediteddecision",
+                        "type": "string"
+                    },
+                    "expeditedFlag": {
+                        "description": "Whether the case qualifies for expedited handling.",
+                        "title": "Expeditedflag",
+                        "type": "boolean"
+                    },
+                    "slaDays": {
+                        "description": "Service-level target in days for the next action.",
+                        "title": "Sladays",
+                        "type": "number"
+                    },
+                    "priority": {
+                        "description": "Recommended processing priority.",
+                        "title": "Priority",
+                        "type": "string"
+                    },
+                    "nextStage": {
+                        "description": "Recommended next workflow stage.",
+                        "title": "Nextstage",
+                        "type": "string"
+                    },
+                    "recommendedAction": {
+                        "description": "Action text for the process or worker.",
+                        "title": "Recommendedaction",
+                        "type": "string"
+                    },
+                    "reasonCode": {
+                        "description": "Machine-readable decision reason.",
+                        "title": "Reasoncode",
+                        "type": "string"
+                    },
+                    "policyRef": {
+                        "description": "Policy or demo reference for the rule.",
+                        "title": "Policyref",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "expeditedDecision",
+                    "expeditedFlag",
+                    "slaDays",
+                    "priority",
+                    "nextStage",
+                    "recommendedAction",
+                    "reasonCode",
+                    "policyRef"
+                ],
+                "title": "Output"
+            },
+            "graph": {
+                "nodes": [
+                    {
+                        "id": "main.py:170",
+                        "name": "main",
+                        "type": "function",
+                        "metadata": {
+                            "file": "main.py"
+                        }
+                    },
+                    {
+                        "id": "main.py:68",
+                        "name": "_result",
+                        "type": "function",
+                        "metadata": {
+                            "file": "main.py"
+                        }
+                    }
+                ],
+                "edges": [
+                    {
+                        "source": "main.py:170",
+                        "target": "main.py:68"
+                    },
+                    {
+                        "source": "main.py:170",
+                        "target": "main.py:68"
+                    },
+                    {
+                        "source": "main.py:170",
+                        "target": "main.py:68"
+                    },
+                    {
+                        "source": "main.py:170",
+                        "target": "main.py:68"
+                    },
+                    {
+                        "source": "main.py:170",
+                        "target": "main.py:68"
+                    },
+                    {
+                        "source": "main.py:170",
+                        "target": "main.py:68"
+                    },
+                    {
+                        "source": "main.py:170",
+                        "target": "main.py:68"
+                    },
+                    {
+                        "source": "main.py:170",
+                        "target": "main.py:68"
+                    }
+                ]
+            }
+        }
+    ]
+}

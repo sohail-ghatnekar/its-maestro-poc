@@ -1,0 +1,93 @@
+{
+  "version": "1.0",
+  "id": "smoke-test",
+  "name": "Smoke Test",
+  "description": "Basic deterministic checks for the expedited screening DMN coded agent.",
+  "evaluatorRefs": ["ExactMatchEvaluator"],
+  "evaluations": [
+    {
+      "id": "test-1-low-income-resource",
+      "name": "Low income and resources qualifies",
+      "inputs": {
+        "filingAccepted": true,
+        "expeditedInputsComplete": true,
+        "priorExpeditedVerificationOutstanding": false,
+        "destituteMigrantSeasonalFarmworker": false,
+        "grossMonthlyIncome": 120,
+        "liquidResources": 75,
+        "homelessHousehold": false,
+        "shelterAndUtilityCosts": 850
+      },
+      "evaluationCriterias": {
+        "ExactMatchEvaluator": {
+          "expectedOutput": {
+            "expeditedDecision": "EXPEDITED_LOW_INCOME_RESOURCE",
+            "expeditedFlag": true,
+            "slaDays": 7.0,
+            "priority": "Critical",
+            "nextStage": "Interview",
+            "recommendedAction": "Prioritize same-day expedited interview and processing.",
+            "reasonCode": "EXPEDITED_GROSS_UNDER_150_RESOURCES_UNDER_100",
+            "policyRef": "SNAPSB Section 4 Expedited Criteria"
+          }
+        }
+      }
+    },
+    {
+      "id": "test-2-wait-for-intake",
+      "name": "Filing not accepted waits for intake",
+      "inputs": {
+        "filingAccepted": false,
+        "expeditedInputsComplete": true,
+        "priorExpeditedVerificationOutstanding": false,
+        "destituteMigrantSeasonalFarmworker": true,
+        "grossMonthlyIncome": 0,
+        "liquidResources": 0,
+        "homelessHousehold": true,
+        "shelterAndUtilityCosts": 1000
+      },
+      "evaluationCriterias": {
+        "ExactMatchEvaluator": {
+          "expectedOutput": {
+            "expeditedDecision": "EXPEDITED_WAIT_FOR_INTAKE",
+            "expeditedFlag": false,
+            "slaDays": 0.0,
+            "priority": "High",
+            "nextStage": "Intake",
+            "recommendedAction": "Complete intake filing review before expedited screening.",
+            "reasonCode": "EXPEDITED_INTAKE_NOT_ACCEPTED",
+            "policyRef": "SNAPSB Section 4 Expedited Screening"
+          }
+        }
+      }
+    },
+    {
+      "id": "test-3-standard-processing",
+      "name": "No expedited criteria uses standard processing",
+      "inputs": {
+        "filingAccepted": true,
+        "expeditedInputsComplete": true,
+        "priorExpeditedVerificationOutstanding": false,
+        "destituteMigrantSeasonalFarmworker": false,
+        "grossMonthlyIncome": 2400,
+        "liquidResources": 600,
+        "homelessHousehold": false,
+        "shelterAndUtilityCosts": 900
+      },
+      "evaluationCriterias": {
+        "ExactMatchEvaluator": {
+          "expectedOutput": {
+            "expeditedDecision": "NOT_EXPEDITED",
+            "expeditedFlag": false,
+            "slaDays": 30.0,
+            "priority": "Normal",
+            "nextStage": "Documents",
+            "recommendedAction": "Continue standard SNAP processing.",
+            "reasonCode": "EXPEDITED_CRITERIA_NOT_MET",
+            "policyRef": "SNAPSB Normal Processing Standard"
+          }
+        }
+      }
+    }
+  ]
+}

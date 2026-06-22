@@ -1,0 +1,74 @@
+{
+  "inputs": {
+    "type": "object",
+    "properties": {
+      "caseInfo": {
+        "type": "object",
+        "required": true,
+        "description": "UiPath case record object. Supports fields such as MyBNumber, ApplicantEmail, AssignedWorker, CurrentStatus, CurrentStage, Priority, FilingDate, CreateTime, UpdateTime, Id, FolderID, MaestroProcessID, and file path fields."
+      },
+      "supervisorFlag": {
+        "type": "boolean",
+        "required": false,
+        "description": "When true, renders the task as a supervisor review."
+      },
+      "previousWorkerDecision": {
+        "type": "string",
+        "required": false,
+        "description": "Previous worker's submitted decision for supervisor review context."
+      },
+      "previousWorkerNotes": {
+        "type": "string",
+        "required": false,
+        "description": "Previous worker's submitted notes for supervisor review context."
+      }
+    }
+  },
+  "outputs": {
+    "type": "object",
+    "properties": {
+      "caseInfo": {
+        "type": "object",
+        "required": true,
+        "description": "Normalized caseInfo record returned with the worker decision."
+      },
+      "decision": {
+        "type": "string",
+        "required": true,
+        "description": "Worker selected decision or submitted action."
+      },
+      "workerNotes": {
+        "type": "string",
+        "required": false,
+        "description": "Optional notes entered by the worker."
+      }
+    }
+  },
+  "inOuts": {
+    "type": "object",
+    "properties": {}
+  },
+  "outcomes": {
+    "type": "object",
+    "properties": {
+      "Approve": {
+        "type": "string"
+      },
+      "Deny": {
+        "type": "string"
+      },
+      "Pend": {
+        "type": "string"
+      },
+      "Withdraw": {
+        "type": "string"
+      },
+      "SendToSupervisor": {
+        "type": "string"
+      },
+      "ReturnForMoreInformation": {
+        "type": "string"
+      }
+    }
+  }
+}

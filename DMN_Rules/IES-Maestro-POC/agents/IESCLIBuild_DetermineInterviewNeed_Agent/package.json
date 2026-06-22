@@ -1,0 +1,19 @@
+{
+  "name": "determine-interview-need-agent",
+  "version": "1.0.0",
+  "description": "Deterministic UiPath coded agent for Determine Interview Need advisory review.",
+  "private": true,
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run test:local",
+    "test:local": "npm run build && node dist/tests/run-sample-cases.js",
+    "run:sample": "npm run build && node dist/tests/run-sample-cases.js"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.8.3"
+  }
+}

@@ -1,9 +1,9 @@
 {
   "scope": "OR.Execution OR.Execution.Read OR.Jobs OR.Tasks PIMS DataFabric.Schema.Read DataFabric.Data.Read DataFabric.Data.Write OR.Administration.Read OR.Folders.Read",
-  "clientId": "",
-  "orgName": "82e69757-09ff-4e6d-83e7-d530f2ac4e7b",
-  "tenantName": "bd829329-42ff-40aa-96dc-95a78168275a",
-  "baseUrl": "https://staging.api.uipath.com",
-  "portalBaseUrl": "https://staging.uipath.com",
-  "redirectUri": "https://uipathlabs.staging.uipath.host/ies-case-management-poc"
+  "clientId": "f4de56bf-bb09-4c0b-9718-0ac0b5f758dd",
+  "orgName": "8bd44258-7207-432b-8222-2b5313027bd7",
+  "tenantName": "9bba8602-b19d-49c6-a843-df81b184f363",
+  "baseUrl": "https://api.uipath.com",
+  "portalBaseUrl": "https://cloud.uipath.com",
+  "redirectUri": "https://itsmaestropoc.uipath.host/ies-maestro-poc"
 }

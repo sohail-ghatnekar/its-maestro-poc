@@ -1,9 +1,9 @@
 {
-  "appName": "ies-case-management-poc",
-  "displayName": "ies-case-management-poc",
-  "appVersion": "1.0.20260618.1",
-  "systemName": "IDdb534f08394e4157b10e375670db8c3f",
+  "appName": "ies-maestro-poc",
+  "displayName": "ies-maestro-poc",
+  "appVersion": "1.0.6",
+  "systemName": "ID51726fb155cf45ff86152d79e4fd6420",
   "appUrl": null,
-  "registeredAt": "2026-06-18T20:23:25.730Z",
+  "registeredAt": "2026-06-22T17:47:52.864Z",
   "appType": "Web"
 }

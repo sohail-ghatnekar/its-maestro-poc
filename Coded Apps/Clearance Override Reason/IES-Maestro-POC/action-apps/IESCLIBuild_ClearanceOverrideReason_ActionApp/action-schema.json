@@ -1,0 +1,59 @@
+{
+  "inputs": {
+    "type": "object",
+    "properties": {
+      "caseInfo": {
+        "type": "object",
+        "required": true,
+        "description": "UiPath case record object. Supports fields such as MyBNumber, ApplicantEmail, AssignedWorker, CurrentStatus, CurrentStage, Priority, FilingDate, CreateTime, UpdateTime, Id, FolderID, MaestroProcessID, and file path fields."
+      }
+    }
+  },
+  "outputs": {
+    "type": "object",
+    "properties": {
+      "caseInfo": {
+        "type": "object",
+        "required": true,
+        "description": "Normalized caseInfo record returned with the worker decision."
+      },
+      "decision": {
+        "type": "string",
+        "required": true,
+        "description": "Worker selected decision or submitted action."
+      },
+      "workerNotes": {
+        "type": "string",
+        "required": false,
+        "description": "Optional notes entered by the worker."
+      }
+    }
+  },
+  "inOuts": {
+    "type": "object",
+    "properties": {}
+  },
+  "outcomes": {
+    "type": "object",
+    "properties": {
+      "AcceptMatch": {
+        "type": "string"
+      },
+      "RejectMatch": {
+        "type": "string"
+      },
+      "AssignNewCinSin": {
+        "type": "string"
+      },
+      "ReturnForResearch": {
+        "type": "string"
+      },
+      "SaveDraft": {
+        "type": "string"
+      },
+      "Cancel": {
+        "type": "string"
+      }
+    }
+  }
+}

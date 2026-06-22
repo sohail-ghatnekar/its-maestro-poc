@@ -1,0 +1,96 @@
+{
+  "version": "1.0",
+  "id": "smoke-test",
+  "name": "Smoke Test",
+  "description": "Basic deterministic checks for the intake DMN coded agent.",
+  "evaluatorRefs": ["ExactMatchEvaluator"],
+  "evaluations": [
+    {
+      "id": "test-1-filing-accepted",
+      "name": "Complete case is accepted",
+      "inputs": {
+        "documentAvailable": true,
+        "myBNumberPresent": true,
+        "namePresent": true,
+        "addressPresent": true,
+        "noFixedAddressFlag": false,
+        "signaturePresent": true,
+        "signatureDatePresent": true,
+        "countyKnown": true,
+        "snapProgramSelected": true,
+        "applicantEmailPresent": true
+      },
+      "evaluationCriterias": {
+        "ExactMatchEvaluator": {
+          "expectedOutput": {
+            "intakeDecision": "FILING_ACCEPTED",
+            "filingAccepted": true,
+            "missingInfoFlag": false,
+            "nextStage": "Expedited Screening",
+            "recommendedAction": "Proceed to same-day expedited screening.",
+            "reasonCode": "INTAKE_COMPLETE",
+            "policyRef": "SNAPSB Section 4 Application Filing"
+          }
+        }
+      }
+    },
+    {
+      "id": "test-2-signature-missing",
+      "name": "Missing signature pends case",
+      "inputs": {
+        "documentAvailable": true,
+        "myBNumberPresent": true,
+        "namePresent": true,
+        "addressPresent": true,
+        "noFixedAddressFlag": false,
+        "signaturePresent": false,
+        "signatureDatePresent": false,
+        "countyKnown": true,
+        "snapProgramSelected": true,
+        "applicantEmailPresent": true
+      },
+      "evaluationCriterias": {
+        "ExactMatchEvaluator": {
+          "expectedOutput": {
+            "intakeDecision": "PEND_SIGNATURE",
+            "filingAccepted": false,
+            "missingInfoFlag": true,
+            "nextStage": "Interview",
+            "recommendedAction": "Request signed application or route to worker signature review.",
+            "reasonCode": "FILING_SIGNATURE_MISSING",
+            "policyRef": "SNAPSB Section 4 Application Filing"
+          }
+        }
+      }
+    },
+    {
+      "id": "test-3-document-missing",
+      "name": "Missing document blocks intake",
+      "inputs": {
+        "documentAvailable": false,
+        "myBNumberPresent": false,
+        "namePresent": false,
+        "addressPresent": false,
+        "noFixedAddressFlag": false,
+        "signaturePresent": false,
+        "signatureDatePresent": false,
+        "countyKnown": false,
+        "snapProgramSelected": false,
+        "applicantEmailPresent": false
+      },
+      "evaluationCriterias": {
+        "ExactMatchEvaluator": {
+          "expectedOutput": {
+            "intakeDecision": "INTAKE_DOCUMENT_MISSING",
+            "filingAccepted": false,
+            "missingInfoFlag": true,
+            "nextStage": "Intake",
+            "recommendedAction": "Attach or retrieve the SNAP application PDF before intake validation.",
+            "reasonCode": "INTAKE_DOC_POINTER_MISSING",
+            "policyRef": "POC Intake Bootstrap"
+          }
+        }
+      }
+    }
+  ]
+}

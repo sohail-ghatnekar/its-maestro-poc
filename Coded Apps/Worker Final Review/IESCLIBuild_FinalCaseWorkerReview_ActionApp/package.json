@@ -1,0 +1,28 @@
+{
+  "name": "iesclibuild-finalcaseworkerreview-actionapp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "UiPath Coded Action App for NY SNAP final case worker review.",
+  "scripts": {
+    "dev": "vite",
+    "build": "npm run typecheck && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "validate-demo": "ts-node --project tsconfig.scripts.json scripts/validate-demo-data.ts",
+    "test": "npm run typecheck && npm run validate-demo"
+  },
+  "dependencies": {
+    "@uipath/coded-action-app": "1.0.0-beta.1",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.29",
+    "@types/react": "^19.1.6",
+    "@types/react-dom": "^19.1.5",
+    "@vitejs/plugin-react": "^4.5.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  }
+}

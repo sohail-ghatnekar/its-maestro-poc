@@ -1,0 +1,191 @@
+{
+    "$schema": "https://cloud.uipath.com/draft/2024-12/entry-point",
+    "$id": "entry-points.json",
+    "entryPoints": [
+        {
+            "filePath": "main",
+            "uniqueId": "6c1cc7be-4195-42ee-93a7-30fd01b52415",
+            "type": "function",
+            "input": {
+                "type": "object",
+                "properties": {
+                    "documentAvailable": {
+                        "description": "Whether an application document pointer is available.",
+                        "title": "Documentavailable",
+                        "type": "boolean"
+                    },
+                    "myBNumberPresent": {
+                        "description": "Whether the MyB number is present in the kickoff payload.",
+                        "title": "Mybnumberpresent",
+                        "type": "boolean"
+                    },
+                    "namePresent": {
+                        "description": "Whether the applicant name is present.",
+                        "title": "Namepresent",
+                        "type": "boolean"
+                    },
+                    "addressPresent": {
+                        "description": "Whether a residence address is present.",
+                        "title": "Addresspresent",
+                        "type": "boolean"
+                    },
+                    "noFixedAddressFlag": {
+                        "description": "Whether the household reports no fixed address.",
+                        "title": "Nofixedaddressflag",
+                        "type": "boolean"
+                    },
+                    "signaturePresent": {
+                        "description": "Whether an applicant or representative signature is present.",
+                        "title": "Signaturepresent",
+                        "type": "boolean"
+                    },
+                    "signatureDatePresent": {
+                        "description": "Whether the signature date is present/readable.",
+                        "title": "Signaturedatepresent",
+                        "type": "boolean"
+                    },
+                    "countyKnown": {
+                        "description": "Whether the county can be determined for routing.",
+                        "title": "Countyknown",
+                        "type": "boolean"
+                    },
+                    "snapProgramSelected": {
+                        "description": "Whether SNAP is selected as the target program.",
+                        "title": "Snapprogramselected",
+                        "type": "boolean"
+                    },
+                    "applicantEmailPresent": {
+                        "description": "Whether applicant email is available for outreach.",
+                        "title": "Applicantemailpresent",
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "documentAvailable",
+                    "myBNumberPresent",
+                    "namePresent",
+                    "addressPresent",
+                    "noFixedAddressFlag",
+                    "signaturePresent",
+                    "signatureDatePresent",
+                    "countyKnown",
+                    "snapProgramSelected",
+                    "applicantEmailPresent"
+                ],
+                "title": "Input"
+            },
+            "output": {
+                "type": "object",
+                "properties": {
+                    "intakeDecision": {
+                        "description": "Primary intake decision code.",
+                        "title": "Intakedecision",
+                        "type": "string"
+                    },
+                    "filingAccepted": {
+                        "description": "Whether the filing may move forward.",
+                        "title": "Filingaccepted",
+                        "type": "boolean"
+                    },
+                    "missingInfoFlag": {
+                        "description": "Whether missing or review-required information exists.",
+                        "title": "Missinginfoflag",
+                        "type": "boolean"
+                    },
+                    "nextStage": {
+                        "description": "Recommended next workflow stage.",
+                        "title": "Nextstage",
+                        "type": "string"
+                    },
+                    "recommendedAction": {
+                        "description": "Action text for the process or worker.",
+                        "title": "Recommendedaction",
+                        "type": "string"
+                    },
+                    "reasonCode": {
+                        "description": "Machine-readable decision reason.",
+                        "title": "Reasoncode",
+                        "type": "string"
+                    },
+                    "policyRef": {
+                        "description": "Policy or demo reference for the rule.",
+                        "title": "Policyref",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "intakeDecision",
+                    "filingAccepted",
+                    "missingInfoFlag",
+                    "nextStage",
+                    "recommendedAction",
+                    "reasonCode",
+                    "policyRef"
+                ],
+                "title": "Output"
+            },
+            "graph": {
+                "nodes": [
+                    {
+                        "id": "main.py:176",
+                        "name": "main",
+                        "type": "function",
+                        "metadata": {
+                            "file": "main.py"
+                        }
+                    },
+                    {
+                        "id": "main.py:63",
+                        "name": "_result",
+                        "type": "function",
+                        "metadata": {
+                            "file": "main.py"
+                        }
+                    }
+                ],
+                "edges": [
+                    {
+                        "source": "main.py:176",
+                        "target": "main.py:63"
+                    },
+                    {
+                        "source": "main.py:176",
+                        "target": "main.py:63"
+                    },
+                    {
+                        "source": "main.py:176",
+                        "target": "main.py:63"
+                    },
+                    {
+                        "source": "main.py:176",
+                        "target": "main.py:63"
+                    },
+                    {
+                        "source": "main.py:176",
+                        "target": "main.py:63"
+                    },
+                    {
+                        "source": "main.py:176",
+                        "target": "main.py:63"
+                    },
+                    {
+                        "source": "main.py:176",
+                        "target": "main.py:63"
+                    },
+                    {
+                        "source": "main.py:176",
+                        "target": "main.py:63"
+                    },
+                    {
+                        "source": "main.py:176",
+                        "target": "main.py:63"
+                    },
+                    {
+                        "source": "main.py:176",
+                        "target": "main.py:63"
+                    }
+                ]
+            }
+        }
+    ]
+}

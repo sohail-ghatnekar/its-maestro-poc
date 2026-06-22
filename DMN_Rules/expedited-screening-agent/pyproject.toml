@@ -1,0 +1,19 @@
+[project]
+name = "expedited-screening-agent"
+version = "0.0.1"
+description = "Deterministic UiPath coded agent for expedited screening DMN rules"
+authors = [{ name = "Sohail Ghatnekar" }]
+dependencies = [
+    "uipath",
+]
+requires-python = ">=3.11"
+
+[dependency-groups]
+dev = [
+    "uipath-dev",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+select = ["E", "F", "W", "I", "UP"]

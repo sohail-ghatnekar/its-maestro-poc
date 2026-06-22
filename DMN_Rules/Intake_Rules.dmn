@@ -1,0 +1,364 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/"
+             xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/"
+             xmlns:di="http://www.omg.org/spec/DMN/20180521/DI/"
+             id="definitions_IESCLIBuild_Intake_Rules"
+             name="IESCLIBuild Intake Rules"
+             namespace="http://uipath.com/iesclibuild/dmn/intake-rules"
+             exporter="ChatGPT"
+             exporterVersion="1.0">
+
+  <inputData id="input_documentAvailable" name="documentAvailable">
+    <variable id="var_documentAvailable" name="documentAvailable" typeRef="boolean"/>
+  </inputData>
+  <inputData id="input_myBNumberPresent" name="myBNumberPresent">
+    <variable id="var_myBNumberPresent" name="myBNumberPresent" typeRef="boolean"/>
+  </inputData>
+  <inputData id="input_namePresent" name="namePresent">
+    <variable id="var_namePresent" name="namePresent" typeRef="boolean"/>
+  </inputData>
+  <inputData id="input_addressPresent" name="addressPresent">
+    <variable id="var_addressPresent" name="addressPresent" typeRef="boolean"/>
+  </inputData>
+  <inputData id="input_noFixedAddressFlag" name="noFixedAddressFlag">
+    <variable id="var_noFixedAddressFlag" name="noFixedAddressFlag" typeRef="boolean"/>
+  </inputData>
+  <inputData id="input_signaturePresent" name="signaturePresent">
+    <variable id="var_signaturePresent" name="signaturePresent" typeRef="boolean"/>
+  </inputData>
+  <inputData id="input_signatureDatePresent" name="signatureDatePresent">
+    <variable id="var_signatureDatePresent" name="signatureDatePresent" typeRef="boolean"/>
+  </inputData>
+  <inputData id="input_countyKnown" name="countyKnown">
+    <variable id="var_countyKnown" name="countyKnown" typeRef="boolean"/>
+  </inputData>
+  <inputData id="input_snapProgramSelected" name="snapProgramSelected">
+    <variable id="var_snapProgramSelected" name="snapProgramSelected" typeRef="boolean"/>
+  </inputData>
+  <inputData id="input_applicantEmailPresent" name="applicantEmailPresent">
+    <variable id="var_applicantEmailPresent" name="applicantEmailPresent" typeRef="boolean"/>
+  </inputData>
+
+  <decision id="decision_intake_rules" name="Intake Rules">
+    <informationRequirement id="informationRequirement_documentAvailable"><requiredInput href="#input_documentAvailable"/></informationRequirement>
+    <informationRequirement id="informationRequirement_myBNumberPresent"><requiredInput href="#input_myBNumberPresent"/></informationRequirement>
+    <informationRequirement id="informationRequirement_namePresent"><requiredInput href="#input_namePresent"/></informationRequirement>
+    <informationRequirement id="informationRequirement_addressPresent"><requiredInput href="#input_addressPresent"/></informationRequirement>
+    <informationRequirement id="informationRequirement_noFixedAddressFlag"><requiredInput href="#input_noFixedAddressFlag"/></informationRequirement>
+    <informationRequirement id="informationRequirement_signaturePresent"><requiredInput href="#input_signaturePresent"/></informationRequirement>
+    <informationRequirement id="informationRequirement_signatureDatePresent"><requiredInput href="#input_signatureDatePresent"/></informationRequirement>
+    <informationRequirement id="informationRequirement_countyKnown"><requiredInput href="#input_countyKnown"/></informationRequirement>
+    <informationRequirement id="informationRequirement_snapProgramSelected"><requiredInput href="#input_snapProgramSelected"/></informationRequirement>
+    <informationRequirement id="informationRequirement_applicantEmailPresent"><requiredInput href="#input_applicantEmailPresent"/></informationRequirement>
+
+    <decisionTable id="decisionTable_intake_rules" hitPolicy="FIRST">
+      <input id="inputClause_documentAvailable" label="Document available">
+        <inputExpression id="inputExpr_documentAvailable" typeRef="boolean"><text>documentAvailable</text></inputExpression>
+      </input>
+      <input id="inputClause_myBNumberPresent" label="MyB number present">
+        <inputExpression id="inputExpr_myBNumberPresent" typeRef="boolean"><text>myBNumberPresent</text></inputExpression>
+      </input>
+      <input id="inputClause_namePresent" label="Applicant name present">
+        <inputExpression id="inputExpr_namePresent" typeRef="boolean"><text>namePresent</text></inputExpression>
+      </input>
+      <input id="inputClause_addressPresent" label="Residence address present">
+        <inputExpression id="inputExpr_addressPresent" typeRef="boolean"><text>addressPresent</text></inputExpression>
+      </input>
+      <input id="inputClause_noFixedAddressFlag" label="No fixed address flag">
+        <inputExpression id="inputExpr_noFixedAddressFlag" typeRef="boolean"><text>noFixedAddressFlag</text></inputExpression>
+      </input>
+      <input id="inputClause_signaturePresent" label="Signature present">
+        <inputExpression id="inputExpr_signaturePresent" typeRef="boolean"><text>signaturePresent</text></inputExpression>
+      </input>
+      <input id="inputClause_signatureDatePresent" label="Signature date present">
+        <inputExpression id="inputExpr_signatureDatePresent" typeRef="boolean"><text>signatureDatePresent</text></inputExpression>
+      </input>
+      <input id="inputClause_countyKnown" label="County known">
+        <inputExpression id="inputExpr_countyKnown" typeRef="boolean"><text>countyKnown</text></inputExpression>
+      </input>
+      <input id="inputClause_snapProgramSelected" label="SNAP selected">
+        <inputExpression id="inputExpr_snapProgramSelected" typeRef="boolean"><text>snapProgramSelected</text></inputExpression>
+      </input>
+      <input id="inputClause_applicantEmailPresent" label="Applicant email present">
+        <inputExpression id="inputExpr_applicantEmailPresent" typeRef="boolean"><text>applicantEmailPresent</text></inputExpression>
+      </input>
+
+      <output id="output_intakeDecision" name="intakeDecision" typeRef="string"/>
+      <output id="output_filingAccepted" name="filingAccepted" typeRef="boolean"/>
+      <output id="output_missingInfoFlag" name="missingInfoFlag" typeRef="boolean"/>
+      <output id="output_nextStage" name="nextStage" typeRef="string"/>
+      <output id="output_recommendedAction" name="recommendedAction" typeRef="string"/>
+      <output id="output_reasonCode" name="reasonCode" typeRef="string"/>
+      <output id="output_policyRef" name="policyRef" typeRef="string"/>
+
+      <rule id="intake_rule_001_document_missing">
+        <description>No application document pointer was supplied to the extraction flow.</description>
+        <inputEntry id="intake_r001_i1"><text>false</text></inputEntry>
+        <inputEntry id="intake_r001_i2"><text>-</text></inputEntry>
+        <inputEntry id="intake_r001_i3"><text>-</text></inputEntry>
+        <inputEntry id="intake_r001_i4"><text>-</text></inputEntry>
+        <inputEntry id="intake_r001_i5"><text>-</text></inputEntry>
+        <inputEntry id="intake_r001_i6"><text>-</text></inputEntry>
+        <inputEntry id="intake_r001_i7"><text>-</text></inputEntry>
+        <inputEntry id="intake_r001_i8"><text>-</text></inputEntry>
+        <inputEntry id="intake_r001_i9"><text>-</text></inputEntry>
+        <inputEntry id="intake_r001_i10"><text>-</text></inputEntry>
+        <outputEntry id="intake_r001_o1"><text>"INTAKE_DOCUMENT_MISSING"</text></outputEntry>
+        <outputEntry id="intake_r001_o2"><text>false</text></outputEntry>
+        <outputEntry id="intake_r001_o3"><text>true</text></outputEntry>
+        <outputEntry id="intake_r001_o4"><text>"Intake"</text></outputEntry>
+        <outputEntry id="intake_r001_o5"><text>"Attach or retrieve the SNAP application PDF before intake validation."</text></outputEntry>
+        <outputEntry id="intake_r001_o6"><text>"INTAKE_DOC_POINTER_MISSING"</text></outputEntry>
+        <outputEntry id="intake_r001_o7"><text>"POC Intake Bootstrap"</text></outputEntry>
+      </rule>
+
+      <rule id="intake_rule_002_myb_missing">
+        <description>MyB number is required for case tracking and worker inbox display.</description>
+        <inputEntry id="intake_r002_i1"><text>true</text></inputEntry>
+        <inputEntry id="intake_r002_i2"><text>false</text></inputEntry>
+        <inputEntry id="intake_r002_i3"><text>-</text></inputEntry>
+        <inputEntry id="intake_r002_i4"><text>-</text></inputEntry>
+        <inputEntry id="intake_r002_i5"><text>-</text></inputEntry>
+        <inputEntry id="intake_r002_i6"><text>-</text></inputEntry>
+        <inputEntry id="intake_r002_i7"><text>-</text></inputEntry>
+        <inputEntry id="intake_r002_i8"><text>-</text></inputEntry>
+        <inputEntry id="intake_r002_i9"><text>-</text></inputEntry>
+        <inputEntry id="intake_r002_i10"><text>-</text></inputEntry>
+        <outputEntry id="intake_r002_o1"><text>"INTAKE_MYB_MISSING"</text></outputEntry>
+        <outputEntry id="intake_r002_o2"><text>false</text></outputEntry>
+        <outputEntry id="intake_r002_o3"><text>true</text></outputEntry>
+        <outputEntry id="intake_r002_o4"><text>"Intake"</text></outputEntry>
+        <outputEntry id="intake_r002_o5"><text>"Correct the kickoff payload so a MyB number is available."</text></outputEntry>
+        <outputEntry id="intake_r002_o6"><text>"INTAKE_MYB_MISSING"</text></outputEntry>
+        <outputEntry id="intake_r002_o7"><text>"POC Intake Bootstrap"</text></outputEntry>
+      </rule>
+
+      <rule id="intake_rule_003_name_missing">
+        <description>A SNAP filing cannot be accepted unless applicant name is present.</description>
+        <inputEntry id="intake_r003_i1"><text>true</text></inputEntry>
+        <inputEntry id="intake_r003_i2"><text>true</text></inputEntry>
+        <inputEntry id="intake_r003_i3"><text>false</text></inputEntry>
+        <inputEntry id="intake_r003_i4"><text>-</text></inputEntry>
+        <inputEntry id="intake_r003_i5"><text>-</text></inputEntry>
+        <inputEntry id="intake_r003_i6"><text>-</text></inputEntry>
+        <inputEntry id="intake_r003_i7"><text>-</text></inputEntry>
+        <inputEntry id="intake_r003_i8"><text>-</text></inputEntry>
+        <inputEntry id="intake_r003_i9"><text>-</text></inputEntry>
+        <inputEntry id="intake_r003_i10"><text>-</text></inputEntry>
+        <outputEntry id="intake_r003_o1"><text>"PEND_NAME"</text></outputEntry>
+        <outputEntry id="intake_r003_o2"><text>false</text></outputEntry>
+        <outputEntry id="intake_r003_o3"><text>true</text></outputEntry>
+        <outputEntry id="intake_r003_o4"><text>"Interview"</text></outputEntry>
+        <outputEntry id="intake_r003_o5"><text>"Request or verify applicant legal name."</text></outputEntry>
+        <outputEntry id="intake_r003_o6"><text>"FILING_NAME_MISSING"</text></outputEntry>
+        <outputEntry id="intake_r003_o7"><text>"SNAPSB Section 4 Application Filing"</text></outputEntry>
+      </rule>
+
+      <rule id="intake_rule_004_signature_missing">
+        <description>A SNAP filing cannot be accepted unless applicant or authorized representative signature is present.</description>
+        <inputEntry id="intake_r004_i1"><text>true</text></inputEntry>
+        <inputEntry id="intake_r004_i2"><text>true</text></inputEntry>
+        <inputEntry id="intake_r004_i3"><text>true</text></inputEntry>
+        <inputEntry id="intake_r004_i4"><text>-</text></inputEntry>
+        <inputEntry id="intake_r004_i5"><text>-</text></inputEntry>
+        <inputEntry id="intake_r004_i6"><text>false</text></inputEntry>
+        <inputEntry id="intake_r004_i7"><text>-</text></inputEntry>
+        <inputEntry id="intake_r004_i8"><text>-</text></inputEntry>
+        <inputEntry id="intake_r004_i9"><text>-</text></inputEntry>
+        <inputEntry id="intake_r004_i10"><text>-</text></inputEntry>
+        <outputEntry id="intake_r004_o1"><text>"PEND_SIGNATURE"</text></outputEntry>
+        <outputEntry id="intake_r004_o2"><text>false</text></outputEntry>
+        <outputEntry id="intake_r004_o3"><text>true</text></outputEntry>
+        <outputEntry id="intake_r004_o4"><text>"Interview"</text></outputEntry>
+        <outputEntry id="intake_r004_o5"><text>"Request signed application or route to worker signature review."</text></outputEntry>
+        <outputEntry id="intake_r004_o6"><text>"FILING_SIGNATURE_MISSING"</text></outputEntry>
+        <outputEntry id="intake_r004_o7"><text>"SNAPSB Section 4 Application Filing"</text></outputEntry>
+      </rule>
+
+      <rule id="intake_rule_005_address_missing">
+        <description>Address is required for filing if the household has one; no fixed address flag can satisfy the address condition.</description>
+        <inputEntry id="intake_r005_i1"><text>true</text></inputEntry>
+        <inputEntry id="intake_r005_i2"><text>true</text></inputEntry>
+        <inputEntry id="intake_r005_i3"><text>true</text></inputEntry>
+        <inputEntry id="intake_r005_i4"><text>false</text></inputEntry>
+        <inputEntry id="intake_r005_i5"><text>false</text></inputEntry>
+        <inputEntry id="intake_r005_i6"><text>true</text></inputEntry>
+        <inputEntry id="intake_r005_i7"><text>-</text></inputEntry>
+        <inputEntry id="intake_r005_i8"><text>-</text></inputEntry>
+        <inputEntry id="intake_r005_i9"><text>-</text></inputEntry>
+        <inputEntry id="intake_r005_i10"><text>-</text></inputEntry>
+        <outputEntry id="intake_r005_o1"><text>"PEND_ADDRESS"</text></outputEntry>
+        <outputEntry id="intake_r005_o2"><text>false</text></outputEntry>
+        <outputEntry id="intake_r005_o3"><text>true</text></outputEntry>
+        <outputEntry id="intake_r005_o4"><text>"Interview"</text></outputEntry>
+        <outputEntry id="intake_r005_o5"><text>"Request residence address or confirm no fixed address."</text></outputEntry>
+        <outputEntry id="intake_r005_o6"><text>"FILING_ADDRESS_MISSING"</text></outputEntry>
+        <outputEntry id="intake_r005_o7"><text>"SNAPSB Section 4 Application Filing"</text></outputEntry>
+      </rule>
+
+      <rule id="intake_rule_006_program_scope">
+        <description>POC flow is SNAP-only; non-SNAP selections require worker routing review.</description>
+        <inputEntry id="intake_r006_i1"><text>true</text></inputEntry>
+        <inputEntry id="intake_r006_i2"><text>true</text></inputEntry>
+        <inputEntry id="intake_r006_i3"><text>true</text></inputEntry>
+        <inputEntry id="intake_r006_i4"><text>-</text></inputEntry>
+        <inputEntry id="intake_r006_i5"><text>-</text></inputEntry>
+        <inputEntry id="intake_r006_i6"><text>true</text></inputEntry>
+        <inputEntry id="intake_r006_i7"><text>-</text></inputEntry>
+        <inputEntry id="intake_r006_i8"><text>-</text></inputEntry>
+        <inputEntry id="intake_r006_i9"><text>false</text></inputEntry>
+        <inputEntry id="intake_r006_i10"><text>-</text></inputEntry>
+        <outputEntry id="intake_r006_o1"><text>"PROGRAM_SCOPE_REVIEW"</text></outputEntry>
+        <outputEntry id="intake_r006_o2"><text>false</text></outputEntry>
+        <outputEntry id="intake_r006_o3"><text>true</text></outputEntry>
+        <outputEntry id="intake_r006_o4"><text>"Intake"</text></outputEntry>
+        <outputEntry id="intake_r006_o5"><text>"Route to worker to confirm SNAP program scope."</text></outputEntry>
+        <outputEntry id="intake_r006_o6"><text>"NON_SNAP_OR_MIXED_PROGRAM_SELECTION"</text></outputEntry>
+        <outputEntry id="intake_r006_o7"><text>"POC SNAP Scope"</text></outputEntry>
+      </rule>
+
+      <rule id="intake_rule_007_county_unknown">
+        <description>Minimum filing can be accepted, but missing county prevents automated group assignment.</description>
+        <inputEntry id="intake_r007_i1"><text>true</text></inputEntry>
+        <inputEntry id="intake_r007_i2"><text>true</text></inputEntry>
+        <inputEntry id="intake_r007_i3"><text>true</text></inputEntry>
+        <inputEntry id="intake_r007_i4"><text>-</text></inputEntry>
+        <inputEntry id="intake_r007_i5"><text>-</text></inputEntry>
+        <inputEntry id="intake_r007_i6"><text>true</text></inputEntry>
+        <inputEntry id="intake_r007_i7"><text>-</text></inputEntry>
+        <inputEntry id="intake_r007_i8"><text>false</text></inputEntry>
+        <inputEntry id="intake_r007_i9"><text>true</text></inputEntry>
+        <inputEntry id="intake_r007_i10"><text>-</text></inputEntry>
+        <outputEntry id="intake_r007_o1"><text>"COUNTY_TRIAGE_REQUIRED"</text></outputEntry>
+        <outputEntry id="intake_r007_o2"><text>true</text></outputEntry>
+        <outputEntry id="intake_r007_o3"><text>true</text></outputEntry>
+        <outputEntry id="intake_r007_o4"><text>"Intake"</text></outputEntry>
+        <outputEntry id="intake_r007_o5"><text>"Route to state/county triage to determine worker group."</text></outputEntry>
+        <outputEntry id="intake_r007_o6"><text>"COUNTY_UNKNOWN"</text></outputEntry>
+        <outputEntry id="intake_r007_o7"><text>"POC Routing Requirement"</text></outputEntry>
+      </rule>
+
+      <rule id="intake_rule_008_signature_date_review">
+        <description>Signature exists but signature date is missing or unreadable; worker review is required.</description>
+        <inputEntry id="intake_r008_i1"><text>true</text></inputEntry>
+        <inputEntry id="intake_r008_i2"><text>true</text></inputEntry>
+        <inputEntry id="intake_r008_i3"><text>true</text></inputEntry>
+        <inputEntry id="intake_r008_i4"><text>-</text></inputEntry>
+        <inputEntry id="intake_r008_i5"><text>-</text></inputEntry>
+        <inputEntry id="intake_r008_i6"><text>true</text></inputEntry>
+        <inputEntry id="intake_r008_i7"><text>false</text></inputEntry>
+        <inputEntry id="intake_r008_i8"><text>true</text></inputEntry>
+        <inputEntry id="intake_r008_i9"><text>true</text></inputEntry>
+        <inputEntry id="intake_r008_i10"><text>-</text></inputEntry>
+        <outputEntry id="intake_r008_o1"><text>"SIGNATURE_DATE_REVIEW"</text></outputEntry>
+        <outputEntry id="intake_r008_o2"><text>true</text></outputEntry>
+        <outputEntry id="intake_r008_o3"><text>true</text></outputEntry>
+        <outputEntry id="intake_r008_o4"><text>"Interview"</text></outputEntry>
+        <outputEntry id="intake_r008_o5"><text>"Worker should review signature date before final intake completion."</text></outputEntry>
+        <outputEntry id="intake_r008_o6"><text>"SIGNATURE_DATE_UNREADABLE"</text></outputEntry>
+        <outputEntry id="intake_r008_o7"><text>"LDSS-4826 Certification Signature"</text></outputEntry>
+      </rule>
+
+      <rule id="intake_rule_009_contact_review">
+        <description>Email is not a SNAP filing requirement, but the POC uses email for applicant outreach.</description>
+        <inputEntry id="intake_r009_i1"><text>true</text></inputEntry>
+        <inputEntry id="intake_r009_i2"><text>true</text></inputEntry>
+        <inputEntry id="intake_r009_i3"><text>true</text></inputEntry>
+        <inputEntry id="intake_r009_i4"><text>-</text></inputEntry>
+        <inputEntry id="intake_r009_i5"><text>-</text></inputEntry>
+        <inputEntry id="intake_r009_i6"><text>true</text></inputEntry>
+        <inputEntry id="intake_r009_i7"><text>true</text></inputEntry>
+        <inputEntry id="intake_r009_i8"><text>true</text></inputEntry>
+        <inputEntry id="intake_r009_i9"><text>true</text></inputEntry>
+        <inputEntry id="intake_r009_i10"><text>false</text></inputEntry>
+        <outputEntry id="intake_r009_o1"><text>"CONTACT_REVIEW_REQUIRED"</text></outputEntry>
+        <outputEntry id="intake_r009_o2"><text>true</text></outputEntry>
+        <outputEntry id="intake_r009_o3"><text>true</text></outputEntry>
+        <outputEntry id="intake_r009_o4"><text>"Interview"</text></outputEntry>
+        <outputEntry id="intake_r009_o5"><text>"Worker should confirm applicant outreach contact information."</text></outputEntry>
+        <outputEntry id="intake_r009_o6"><text>"APPLICANT_EMAIL_MISSING"</text></outputEntry>
+        <outputEntry id="intake_r009_o7"><text>"POC Applicant Outreach"</text></outputEntry>
+      </rule>
+
+      <rule id="intake_rule_010_filing_accepted">
+        <description>Minimum filing conditions are satisfied; proceed to expedited screening.</description>
+        <inputEntry id="intake_r010_i1"><text>true</text></inputEntry>
+        <inputEntry id="intake_r010_i2"><text>true</text></inputEntry>
+        <inputEntry id="intake_r010_i3"><text>true</text></inputEntry>
+        <inputEntry id="intake_r010_i4"><text>-</text></inputEntry>
+        <inputEntry id="intake_r010_i5"><text>-</text></inputEntry>
+        <inputEntry id="intake_r010_i6"><text>true</text></inputEntry>
+        <inputEntry id="intake_r010_i7"><text>true</text></inputEntry>
+        <inputEntry id="intake_r010_i8"><text>true</text></inputEntry>
+        <inputEntry id="intake_r010_i9"><text>true</text></inputEntry>
+        <inputEntry id="intake_r010_i10"><text>true</text></inputEntry>
+        <outputEntry id="intake_r010_o1"><text>"FILING_ACCEPTED"</text></outputEntry>
+        <outputEntry id="intake_r010_o2"><text>true</text></outputEntry>
+        <outputEntry id="intake_r010_o3"><text>false</text></outputEntry>
+        <outputEntry id="intake_r010_o4"><text>"Expedited Screening"</text></outputEntry>
+        <outputEntry id="intake_r010_o5"><text>"Proceed to same-day expedited screening."</text></outputEntry>
+        <outputEntry id="intake_r010_o6"><text>"INTAKE_COMPLETE"</text></outputEntry>
+        <outputEntry id="intake_r010_o7"><text>"SNAPSB Section 4 Application Filing"</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+
+  <dmndi:DMNDI>
+    <dmndi:DMNDiagram id="DMNDiagram_IESCLIBuild_Intake_Rules" name="IESCLIBuild Intake Rules Diagram">
+      <dmndi:DMNShape id="DMNShape_decision_intake_rules" dmnElementRef="decision_intake_rules">
+        <dc:Bounds x="420" y="340" width="240" height="90"/>
+      </dmndi:DMNShape>
+      <dmndi:DMNShape id="DMNShape_input_documentAvailable" dmnElementRef="input_documentAvailable"><dc:Bounds x="80" y="80" width="200" height="60"/></dmndi:DMNShape>
+      <dmndi:DMNShape id="DMNShape_input_myBNumberPresent" dmnElementRef="input_myBNumberPresent"><dc:Bounds x="80" y="165" width="200" height="60"/></dmndi:DMNShape>
+      <dmndi:DMNShape id="DMNShape_input_namePresent" dmnElementRef="input_namePresent"><dc:Bounds x="80" y="250" width="200" height="60"/></dmndi:DMNShape>
+      <dmndi:DMNShape id="DMNShape_input_addressPresent" dmnElementRef="input_addressPresent"><dc:Bounds x="80" y="335" width="200" height="60"/></dmndi:DMNShape>
+      <dmndi:DMNShape id="DMNShape_input_noFixedAddressFlag" dmnElementRef="input_noFixedAddressFlag"><dc:Bounds x="80" y="420" width="200" height="60"/></dmndi:DMNShape>
+      <dmndi:DMNShape id="DMNShape_input_signaturePresent" dmnElementRef="input_signaturePresent"><dc:Bounds x="800" y="80" width="220" height="60"/></dmndi:DMNShape>
+      <dmndi:DMNShape id="DMNShape_input_signatureDatePresent" dmnElementRef="input_signatureDatePresent"><dc:Bounds x="800" y="165" width="220" height="60"/></dmndi:DMNShape>
+      <dmndi:DMNShape id="DMNShape_input_countyKnown" dmnElementRef="input_countyKnown"><dc:Bounds x="800" y="250" width="220" height="60"/></dmndi:DMNShape>
+      <dmndi:DMNShape id="DMNShape_input_snapProgramSelected" dmnElementRef="input_snapProgramSelected"><dc:Bounds x="800" y="335" width="220" height="60"/></dmndi:DMNShape>
+      <dmndi:DMNShape id="DMNShape_input_applicantEmailPresent" dmnElementRef="input_applicantEmailPresent"><dc:Bounds x="800" y="420" width="220" height="60"/></dmndi:DMNShape>
+      <dmndi:DMNEdge id="DMNEdge_input_documentAvailable" dmnElementRef="informationRequirement_documentAvailable" sourceElement="DMNShape_input_documentAvailable" targetElement="DMNShape_decision_intake_rules">
+        <di:waypoint x="280" y="110"/>
+        <di:waypoint x="420" y="350"/>
+      </dmndi:DMNEdge>
+      <dmndi:DMNEdge id="DMNEdge_input_myBNumberPresent" dmnElementRef="informationRequirement_myBNumberPresent" sourceElement="DMNShape_input_myBNumberPresent" targetElement="DMNShape_decision_intake_rules">
+        <di:waypoint x="280" y="195"/>
+        <di:waypoint x="420" y="365"/>
+      </dmndi:DMNEdge>
+      <dmndi:DMNEdge id="DMNEdge_input_namePresent" dmnElementRef="informationRequirement_namePresent" sourceElement="DMNShape_input_namePresent" targetElement="DMNShape_decision_intake_rules">
+        <di:waypoint x="280" y="280"/>
+        <di:waypoint x="420" y="380"/>
+      </dmndi:DMNEdge>
+      <dmndi:DMNEdge id="DMNEdge_input_addressPresent" dmnElementRef="informationRequirement_addressPresent" sourceElement="DMNShape_input_addressPresent" targetElement="DMNShape_decision_intake_rules">
+        <di:waypoint x="280" y="365"/>
+        <di:waypoint x="420" y="395"/>
+      </dmndi:DMNEdge>
+      <dmndi:DMNEdge id="DMNEdge_input_noFixedAddressFlag" dmnElementRef="informationRequirement_noFixedAddressFlag" sourceElement="DMNShape_input_noFixedAddressFlag" targetElement="DMNShape_decision_intake_rules">
+        <di:waypoint x="280" y="450"/>
+        <di:waypoint x="420" y="410"/>
+      </dmndi:DMNEdge>
+      <dmndi:DMNEdge id="DMNEdge_input_signaturePresent" dmnElementRef="informationRequirement_signaturePresent" sourceElement="DMNShape_input_signaturePresent" targetElement="DMNShape_decision_intake_rules">
+        <di:waypoint x="800" y="110"/>
+        <di:waypoint x="660" y="350"/>
+      </dmndi:DMNEdge>
+      <dmndi:DMNEdge id="DMNEdge_input_signatureDatePresent" dmnElementRef="informationRequirement_signatureDatePresent" sourceElement="DMNShape_input_signatureDatePresent" targetElement="DMNShape_decision_intake_rules">
+        <di:waypoint x="800" y="195"/>
+        <di:waypoint x="660" y="365"/>
+      </dmndi:DMNEdge>
+      <dmndi:DMNEdge id="DMNEdge_input_countyKnown" dmnElementRef="informationRequirement_countyKnown" sourceElement="DMNShape_input_countyKnown" targetElement="DMNShape_decision_intake_rules">
+        <di:waypoint x="800" y="280"/>
+        <di:waypoint x="660" y="380"/>
+      </dmndi:DMNEdge>
+      <dmndi:DMNEdge id="DMNEdge_input_snapProgramSelected" dmnElementRef="informationRequirement_snapProgramSelected" sourceElement="DMNShape_input_snapProgramSelected" targetElement="DMNShape_decision_intake_rules">
+        <di:waypoint x="800" y="365"/>
+        <di:waypoint x="660" y="395"/>
+      </dmndi:DMNEdge>
+      <dmndi:DMNEdge id="DMNEdge_input_applicantEmailPresent" dmnElementRef="informationRequirement_applicantEmailPresent" sourceElement="DMNShape_input_applicantEmailPresent" targetElement="DMNShape_decision_intake_rules">
+        <di:waypoint x="800" y="450"/>
+        <di:waypoint x="660" y="410"/>
+      </dmndi:DMNEdge>
+    </dmndi:DMNDiagram>
+  </dmndi:DMNDI>
+</definitions>

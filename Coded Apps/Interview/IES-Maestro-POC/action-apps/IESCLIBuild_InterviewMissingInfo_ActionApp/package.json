@@ -1,0 +1,24 @@
+{
+  "name": "iesclibuild-interviewmissinginfo-actionapp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "UiPath Coded Action App for the Interview and Missing Info human task.",
+  "scripts": {
+    "dev": "vite",
+    "build": "npm run typecheck && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run typecheck"
+  },
+  "dependencies": {
+    "@uipath/coded-action-app": "1.0.0-beta.1",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.6",
+    "@types/react-dom": "^19.1.5",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  }
+}

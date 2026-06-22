@@ -1,0 +1,146 @@
+{
+  "version": "1.0",
+  "id": "determine-interview-need-smoke-test",
+  "name": "Determine Interview Need Smoke Test",
+  "description": "Smoke coverage for standard interview, expedited priority, and document follow-up.",
+  "evaluatorRefs": ["JsonSimilarityEvaluator"],
+  "evaluations": [
+    {
+      "id": "test-1-standard-interview-required",
+      "name": "Standard interview required",
+      "inputs": {
+        "caseData": {
+          "MyBNumber": "MYB-1001",
+          "MaestroProcessID": "INT-NEED-MYB-1001",
+          "ApplicantEmail": "sohail.ghatnekar@uipath.com",
+          "AssignedWorker": "sohail.ghatnekar@uipath.com",
+          "CurrentStatus": 1,
+          "Priority": 2,
+          "CreateTime": "2026-06-16T19:42:17.3436527+00:00",
+          "CurrentStage": 6,
+          "FilingDate": "2026-06-16",
+          "Id": "875db17a-bb69-f111-8fcb-002248a04001"
+        },
+        "expeditedScreeningResult": "NOT_EXPEDITED",
+        "documentExtraction": {
+          "documents": [],
+          "lowestConfidence": 1,
+          "missingRequiredDocuments": [],
+          "insufficientDocuments": []
+        }
+      },
+      "evaluationCriterias": {
+        "JsonSimilarityEvaluator": {
+          "expectedOutput": {
+            "caseInfo": {
+              "myBNumber": "MYB-1001"
+            },
+            "agentReview": {
+              "interviewNeeded": true,
+              "recommendedPriority": "Normal",
+              "shouldCreateHumanTask": true
+            },
+            "statusUpdate": {
+              "nextRecommendedStep": "Create Interview and Missing Info human task"
+            },
+            "errors": []
+          }
+        }
+      }
+    },
+    {
+      "id": "test-2-expedited-priority",
+      "name": "Expedited priority",
+      "inputs": {
+        "caseData": {
+          "MyBNumber": "MYB-1002",
+          "MaestroProcessID": "INT-NEED-MYB-1002",
+          "ApplicantEmail": "sohail.ghatnekar@uipath.com",
+          "AssignedWorker": "sohail.ghatnekar@uipath.com",
+          "CurrentStatus": 1,
+          "Priority": 2,
+          "CreateTime": "2026-06-16T19:42:17.3436527+00:00",
+          "CurrentStage": 6,
+          "FilingDate": "2026-06-16",
+          "Id": "875db17a-bb69-f111-8fcb-002248a04002"
+        },
+        "expeditedScreeningResult": "EXPEDITED_LOW_INCOME_RESOURCE",
+        "documentExtraction": {
+          "documents": [],
+          "lowestConfidence": 1,
+          "missingRequiredDocuments": [],
+          "insufficientDocuments": []
+        }
+      },
+      "evaluationCriterias": {
+        "JsonSimilarityEvaluator": {
+          "expectedOutput": {
+            "caseInfo": {
+              "myBNumber": "MYB-1002"
+            },
+            "agentReview": {
+              "interviewNeeded": true,
+              "recommendedPriority": "Critical",
+              "shouldCreateHumanTask": true
+            },
+            "errors": []
+          }
+        }
+      }
+    },
+    {
+      "id": "test-3-document-follow-up",
+      "name": "Low-confidence paystub",
+      "inputs": {
+        "caseData": {
+          "ProofofResidenceFilePath": "Michael_Motorist_National_Grid_Utility_SAMPLE.pdf",
+          "LicenseFilePath": "fake-license.jpg",
+          "MyBNumber": "MYB-2D8U66GM",
+          "MaestroProcessID": "bb935bce-2e74-42fa-96fd-a056e1e1b588@",
+          "ApplicantEmail": "sohail.ghatnekar@uipath.com",
+          "AssignedWorker": "sohail.ghatnekar@uipath.com",
+          "CurrentStatus": 1,
+          "Priority": 4,
+          "AppFilePath": "Fake_SNAP_App_Completed.pdf",
+          "CreateTime": "2026-06-16T19:42:17.3436527+00:00",
+          "CurrentStage": 6,
+          "FolderID": "0712d628-1391-46d2-859c-d71a6ace28e1",
+          "PaystubFilePath": "Michael_Motorist_Pay_Stub_SAMPLE.pdf",
+          "FilingDate": "2026-06-16",
+          "Id": "875db17a-bb69-f111-8fcb-002248a04067"
+        },
+        "expeditedScreeningResult": "NOT_EXPEDITED",
+        "documentExtraction": {
+          "documents": [
+            {
+              "documentId": "DOC-LOW-PAYSTUB",
+              "documentType": "Paystub",
+              "status": "Low Confidence Review",
+              "confidence": 0.74,
+              "reusable": false,
+              "fileName": "Michael_Motorist_Pay_Stub_SAMPLE.pdf",
+              "requiresWorkerReview": true
+            }
+          ],
+          "lowestConfidence": 0.74,
+          "missingRequiredDocuments": [],
+          "insufficientDocuments": ["Paystub"]
+        }
+      },
+      "evaluationCriterias": {
+        "JsonSimilarityEvaluator": {
+          "expectedOutput": {
+            "caseInfo": {
+              "myBNumber": "MYB-2D8U66GM"
+            },
+            "agentReview": {
+              "recommendedPriority": "Critical",
+              "shouldCreateHumanTask": true
+            },
+            "errors": []
+          }
+        }
+      }
+    }
+  ]
+}

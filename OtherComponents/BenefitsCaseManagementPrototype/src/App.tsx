@@ -72,7 +72,6 @@ import type { HelpCategory, HelpContextId } from './helpContent';
 import uiPathLogoUrl from './assets/uipath-logo-digital-rgb-b.svg';
 
 type Screen = 'inbox' | 'detail' | 'operations' | 'assignment' | 'testing' | 'settings' | 'helpCenter';
-type OperationsSubtab = 'Operations Summary' | 'IES SNAP Dash';
 type DetailTab =
   | 'Summary'
   | 'Actions'
@@ -257,7 +256,6 @@ const liveTaskStatusFilterLabels: Record<LiveTaskStatusFilter, string> = {
   completed: 'Completed',
 };
 
-const operationsSubtabOptions: OperationsSubtab[] = ['Operations Summary', 'IES SNAP Dash'];
 const assignmentSubtabOptions: AssignmentSubtab[] = ['Task Assignments', 'PTO Calendar', 'My Team'];
 const caseWorkerAssignmentSubtabOptions: AssignmentSubtab[] = ['PTO Calendar'];
 const assignmentRoutingModeOptions: AssignmentRoutingMode[] = [
@@ -269,7 +267,6 @@ const assignmentRoutingModeOptions: AssignmentRoutingMode[] = [
 
 const defaultTaskAssignmentEmail = 'sohail.ghatnekar@uipath.com';
 const simulatedApplicationEmailOptions = [
-  'jamaal.chaney@uipath.com',
   'sohail.ghatnekar@uipath.com',
 ];
 
@@ -2845,7 +2842,6 @@ function App() {
   const [helpCategory, setHelpCategory] = useState<HelpCategory | 'All'>('All');
   const [filters, setFilters] = useState<Filters>(emptyFilters);
   const [inboxPage, setInboxPage] = useState(1);
-  const [activeOperationsSubtab, setActiveOperationsSubtab] = useState<OperationsSubtab>('Operations Summary');
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [modal, setModal] = useState<ModalState | null>(null);
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
@@ -6393,31 +6389,6 @@ function App() {
       <DemoBanner />
       <ScreenGuidance context="operations" />
 
-      <div className="border-b border-gray-200">
-        <nav className="-mb-px flex flex-wrap gap-3" aria-label="Operations subtabs">
-          {operationsSubtabOptions.map((subtab) => {
-            const isActiveSubtab = activeOperationsSubtab === subtab;
-
-            return (
-              <button
-                key={subtab}
-                type="button"
-                onClick={() => setActiveOperationsSubtab(subtab)}
-                className={`border-b-2 px-1 pb-3 text-sm font-semibold ${
-                  isActiveSubtab
-                    ? 'border-blue-600 text-blue-700'
-                    : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
-                }`}
-              >
-                {subtab}
-              </button>
-            );
-          })}
-        </nav>
-      </div>
-
-      {activeOperationsSubtab === 'Operations Summary' ? (
-        <>
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-5">
         <MetricCard label="Average case age" value={operationsMetrics.averageCaseAge} tone="gray" detail="Sample data" />
         <MetricCard label="Due soon count" value={operationsMetrics.dueSoon} tone="red" detail="Sample data" />
@@ -6486,25 +6457,6 @@ function App() {
       <HelpBox>
         Operations dashboard metrics use fixed sample data for the demo. Click a county, status bar, or bottleneck to filter the inbox.
       </HelpBox>
-        </>
-      ) : (
-        <>
-      <SectionCard
-        title={IES_WORKFLOW_CONFIG.insightsDashboards.iesSnapDash.name}
-      >
-        <div className="flex justify-start">
-          <a
-            href={IES_WORKFLOW_CONFIG.insightsDashboards.iesSnapDash.url}
-            target="_blank"
-            rel="noreferrer"
-            className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-800 hover:border-blue-300 hover:bg-blue-100"
-          >
-            Open in Insights
-          </a>
-        </div>
-      </SectionCard>
-        </>
-      )}
     </div>
   );
 

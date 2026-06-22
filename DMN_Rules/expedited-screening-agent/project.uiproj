@@ -1,0 +1,6 @@
+{
+  "ProjectType": "Function",
+  "Name": "expedited-screening-agent",
+  "Description": "Deterministic UiPath coded agent for expedited screening DMN rules",
+  "MainFile": null
+}

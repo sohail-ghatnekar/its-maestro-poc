@@ -1,0 +1,6 @@
+{
+  "ProjectType": "Function",
+  "Name": "dmn-rules-agent",
+  "Description": "Deterministic UiPath coded agent for IES intake DMN rules",
+  "MainFile": null
+}

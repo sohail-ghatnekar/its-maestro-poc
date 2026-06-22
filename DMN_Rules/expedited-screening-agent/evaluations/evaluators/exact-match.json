@@ -1,0 +1,12 @@
+{
+  "version": "1.0",
+  "id": "ExactMatchEvaluator",
+  "evaluatorTypeId": "uipath-exact-match",
+  "description": "Exact output match for deterministic expedited screening decisions.",
+  "evaluatorConfig": {
+    "name": "ExactMatchEvaluator",
+    "targetOutputKey": "*",
+    "ignoreCase": false,
+    "negated": false
+  }
+}
