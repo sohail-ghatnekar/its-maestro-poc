@@ -2176,6 +2176,26 @@ function shouldShowExternalValidationResults(caseItem: BenefitCase, hasPendingTa
     || caseHasMovedPastStage(caseItem, 5);
 }
 
+function extractCpStepCode(value: string): string | null {
+  const normalizedValue = value.toLowerCase();
+  const match = normalizedValue.match(/\bcp\s*([0-9]+(?:\.[0-9]+)?)\b/);
+
+  return match ? `cp${match[1]}` : null;
+}
+
+function getDefinitionCpStepCode(definition: ActionAppDefinition): string | null {
+  return extractCpStepCode(definition.name);
+}
+
+function getTaskCpStepCode(task: LiveTaskSummary): string | null {
+  return extractCpStepCode(task.searchText || [
+    task.title,
+    task.action,
+    task.actionLabel,
+    task.appDefinition?.name,
+  ].filter(Boolean).join(' '));
+}
+
 function scoreTaskForActionDefinition(task: LiveTaskSummary, definition: ActionAppDefinition): number {
   const searchText = task.searchText || [
     task.title,
@@ -2185,10 +2205,23 @@ function scoreTaskForActionDefinition(task: LiveTaskSummary, definition: ActionA
     task.appDefinition?.appName,
   ].filter(Boolean).join(' ').toLowerCase();
   const appId = definition.appId.toLowerCase();
+  const taskStepCode = getTaskCpStepCode(task);
+  const definitionStepCode = getDefinitionCpStepCode(definition);
+
+  if (taskStepCode && definitionStepCode && taskStepCode !== definitionStepCode) {
+    return 0;
+  }
+
+  const definitionsUsingSameApp = ACTION_APP_DEFINITIONS.filter((candidate) =>
+    candidate.appId === definition.appId
+  ).length;
   const sameActionApp = task.actionAppId?.toLowerCase() === appId
     || task.appDefinition?.appId === definition.appId
     || searchText.includes(appId);
-  const exactStepMatch = searchText.includes(definition.name.toLowerCase()) ? 50 : 0;
+  const appMatchScore = sameActionApp ? definitionsUsingSameApp > 1 ? 24 : 120 : 0;
+  const stepCodeMatch = taskStepCode && definitionStepCode && taskStepCode === definitionStepCode ? 90 : 0;
+  const inferredDefinitionMatch = task.appDefinition?.id === definition.id ? 60 : 0;
+  const exactStepMatch = searchText.includes(definition.name.toLowerCase()) ? 80 : 0;
   const appNameMatch = searchText.includes(definition.appName.toLowerCase()) ? 4 : 0;
   const keywordScore = definition.keywords.reduce((score, keyword) => {
     const normalizedKeyword = keyword.toLowerCase();
@@ -2200,33 +2233,51 @@ function scoreTaskForActionDefinition(task: LiveTaskSummary, definition: ActionA
     return score + 8 + normalizedKeyword.split(/\s+/).length;
   }, 0);
 
-  if (!sameActionApp && exactStepMatch === 0 && appNameMatch === 0 && keywordScore === 0) {
+  if (!sameActionApp && inferredDefinitionMatch === 0 && stepCodeMatch === 0 && exactStepMatch === 0 && appNameMatch === 0 && keywordScore === 0) {
     return 0;
   }
 
-  return (sameActionApp ? 120 : 0) + exactStepMatch + appNameMatch + keywordScore;
+  return appMatchScore + inferredDefinitionMatch + stepCodeMatch + exactStepMatch + appNameMatch + keywordScore;
 }
 
 function buildActionTaskRows(tasks: LiveTaskSummary[]) {
-  const usedTaskIds = new Set<number>();
+  const matchedDefinitions = new Set<string>();
+  const matchedTaskIds = new Set<number>();
+  const taskByDefinitionId = new Map<string, LiveTaskSummary>();
+  const candidates = ACTION_APP_DEFINITIONS.flatMap((definition, definitionIndex) =>
+    tasks.map((task, taskIndex) => ({
+      definition,
+      definitionIndex,
+      task,
+      taskIndex,
+      score: scoreTaskForActionDefinition(task, definition),
+      stepCodeMatch: getTaskCpStepCode(task) === getDefinitionCpStepCode(definition) ? 1 : 0,
+      inferredDefinitionMatch: task.appDefinition?.id === definition.id ? 1 : 0,
+    }))
+  )
+    .filter((candidate) => candidate.score > 0)
+    .sort((left, right) =>
+      right.score - left.score
+      || right.stepCodeMatch - left.stepCodeMatch
+      || right.inferredDefinitionMatch - left.inferredDefinitionMatch
+      || left.definitionIndex - right.definitionIndex
+      || left.taskIndex - right.taskIndex
+    );
 
-  return ACTION_APP_DEFINITIONS.map((definition) => {
-    const candidates = tasks
-      .filter((task) => !usedTaskIds.has(task.id))
-      .map((task) => ({
-        task,
-        score: scoreTaskForActionDefinition(task, definition),
-      }))
-      .filter((candidate) => candidate.score > 0)
-      .sort((left, right) => right.score - left.score);
-    const task = candidates[0]?.task || null;
-
-    if (task) {
-      usedTaskIds.add(task.id);
+  candidates.forEach((candidate) => {
+    if (matchedDefinitions.has(candidate.definition.id) || matchedTaskIds.has(candidate.task.id)) {
+      return;
     }
 
-    return { definition, task };
+    matchedDefinitions.add(candidate.definition.id);
+    matchedTaskIds.add(candidate.task.id);
+    taskByDefinitionId.set(candidate.definition.id, candidate.task);
   });
+
+  return ACTION_APP_DEFINITIONS.map((definition) => ({
+    definition,
+    task: taskByDefinitionId.get(definition.id) || null,
+  }));
 }
 
 function isLiveTaskCompleted(task: LiveTaskSummary): boolean {
@@ -2243,7 +2294,7 @@ function liveTaskMatchesStatusFilter(task: LiveTaskSummary, filter: LiveTaskStat
 }
 
 function getLiveTaskDisplayName(task: LiveTaskSummary, definition?: ActionAppDefinition): string {
-  return definition?.name || task.appDefinition?.name || task.title || `Action Center task ${task.id}`;
+  return task.appDefinition?.name || definition?.name || task.title || `Action Center task ${task.id}`;
 }
 
 function mergeVisibleLiveTasks(currentTasks: LiveTaskSummary[], refreshedTasks: LiveTaskSummary[]): LiveTaskSummary[] {
@@ -4072,7 +4123,10 @@ function App() {
       open: liveTasks.filter((task) => !isLiveTaskCompleted(task)).length,
       completed: liveTasks.filter(isLiveTaskCompleted).length,
     };
-    const taskRows = buildActionTaskRows(filteredLiveTasks)
+    const allTaskRows = buildActionTaskRows(liveTasks)
+      .filter(({ task }) => Boolean(task)) as Array<{ definition: ActionAppDefinition; task: LiveTaskSummary }>;
+    const taskRows = allTaskRows
+      .filter(({ task }) => liveTaskMatchesStatusFilter(task, liveTaskStatusFilter))
       .filter(({ task }) => Boolean(task)) as Array<{ definition: ActionAppDefinition; task: LiveTaskSummary }>;
     const matchedTaskIds = new Set(
       taskRows

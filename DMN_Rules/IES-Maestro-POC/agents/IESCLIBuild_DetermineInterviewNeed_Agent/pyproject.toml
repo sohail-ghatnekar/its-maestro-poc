@@ -1,6 +1,6 @@
 [project]
-name = "determine-interview-need-agent"
-version = "0.0.1"
+name = "IES.Maestro.POC.agent.Determine.Interview"
+version = "1.0.11"
 description = "Deterministic UiPath coded agent for Determine Interview Need advisory review"
 authors = [{ name = "Sohail Ghatnekar" }]
 dependencies = [

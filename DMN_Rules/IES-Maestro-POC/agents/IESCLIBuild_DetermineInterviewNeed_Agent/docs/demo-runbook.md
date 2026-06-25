@@ -2,7 +2,7 @@
 
 ## Scenario
 
-Run sample scenario MYB-1004 to demonstrate a low-confidence paystub and fluctuating income.
+Run sample scenario MYB-1004 to demonstrate critical-priority case handling with null document extraction.
 
 ## Steps
 
@@ -24,9 +24,9 @@ npm run run:sample
 
 - `agentReview.interviewNeeded` is `true`.
 - `agentReview.shouldCreateHumanTask` is `true`.
-- `agentReview.reasons` includes `DOCUMENT_REVIEW_PAYSTUB_LOW_CONFIDENCE`.
-- `agentReview.reasons` includes `INCOME_CONFIRMATION_NEEDED`.
-- `agentReview.missingInfoItems` includes a paystub follow-up item.
+- `agentReview.reasons` includes `SNAP_INTERVIEW_REQUIRED`.
+- `agentReview.reasons` does not include document extraction reason codes.
+- `agentReview.missingInfoItems` is empty.
 - `humanTaskRecommendation` exists.
 - The output does not make an eligibility approval or denial decision.
 

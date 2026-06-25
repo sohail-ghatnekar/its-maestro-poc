@@ -51,28 +51,10 @@ export interface ExpeditedScreeningResult {
   [key: string]: unknown;
 }
 
-export interface ExtractedDocument {
-  documentId?: string;
-  documentType: string;
-  status?: string;
-  confidence?: number;
-  reusable?: boolean;
-  fileName?: string;
-  requiresWorkerReview?: boolean;
-}
-
-export interface DocumentExtraction {
-  documents: ExtractedDocument[];
-  documentReviewNeeded?: boolean;
-  lowestConfidence?: number;
-  missingRequiredDocuments?: string[];
-  insufficientDocuments?: string[];
-}
-
 export interface DetermineInterviewNeedInput {
   caseData: CaseData;
   expeditedScreeningResult: string;
-  documentExtraction: DocumentExtraction;
+  documentExtraction?: unknown | null;
 }
 
 export interface TaskContext {
@@ -138,7 +120,6 @@ export interface PolicyConfig {
   defaultInterviewMethod: InterviewMethod | string;
   allowInPersonIfRequested: boolean;
   expeditedInterviewPriority: boolean;
-  lowDocumentConfidenceThreshold: number;
   dueSoonDays: number;
 }
 
@@ -163,7 +144,6 @@ export interface NormalizedDetermineInterviewNeedInput {
   applicationExtraction: ApplicationExtraction;
   intakeRuleResult: IntakeRuleResult;
   expeditedScreeningResult: ExpeditedScreeningResult;
-  documentExtraction: DocumentExtraction;
   priorInterviewState: PriorInterviewState;
   policyConfig: PolicyConfig;
   auditInfo: AuditInfo;

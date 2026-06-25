@@ -1,12 +1,12 @@
 # Data Contract
 
-The agent accepts three top-level inputs: `caseData`, `documentExtraction`, and `expeditedScreeningResult`.
+The agent accepts `caseData`, `expeditedScreeningResult`, and an optional `documentExtraction` field.
 
 ## Required Inputs
 
 `caseData` is the Case Management/Data Service record. The agent requires `MyBNumber` and `Id`. It also uses optional fields such as `Priority`, `FilingDate`, `CreateTime`, `CurrentStatus`, `CurrentStage`, `MaestroProcessID`, `ApplicantEmail`, `AssignedWorker`, and document file path fields.
 
-`documentExtraction` contains submitted document metadata, confidence values, missing required documents, and insufficient documents. The agent requires `documents` to be an array.
+`documentExtraction` can be omitted or sent as `null` and is ignored by the review for now. The agent does not validate it, normalize it, or use it when creating recommendations.
 
 `expeditedScreeningResult` is a plain string with the expedited screening result. Use values such as `NOT_EXPEDITED`, `EXPEDITED_LOW_INCOME_RESOURCE`, or a short human-readable result string.
 
@@ -18,7 +18,6 @@ The agent defaults to:
 
 - SNAP interview generally required.
 - Phone interview method.
-- Low document confidence threshold of `0.85`.
 - Due-soon window of `7` days.
 - No known existing interview task or pending applicant response.
 
@@ -53,23 +52,7 @@ The agent defaults to:
     "UpdateTime": "2026-06-16T19:42:17.3436527+00:00",
     "Id": "875db17a-bb69-f111-8fcb-002248a04067"
   },
-  "documentExtraction": {
-    "documents": [
-      {
-        "documentId": "DOC-LOW-PAYSTUB",
-        "documentType": "Paystub",
-        "status": "Low Confidence Review",
-        "confidence": 0.74,
-        "reusable": false,
-        "fileName": "Michael_Motorist_Pay_Stub_SAMPLE.pdf",
-        "requiresWorkerReview": true
-      }
-    ],
-    "documentReviewNeeded": true,
-    "lowestConfidence": 0.74,
-    "missingRequiredDocuments": [],
-    "insufficientDocuments": ["Paystub"]
-  },
+  "documentExtraction": null,
   "expeditedScreeningResult": "NOT_EXPEDITED"
 }
 ```

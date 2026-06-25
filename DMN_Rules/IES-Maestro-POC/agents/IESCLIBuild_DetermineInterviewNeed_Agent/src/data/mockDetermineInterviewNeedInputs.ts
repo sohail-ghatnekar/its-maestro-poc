@@ -2,7 +2,6 @@ import type {
   CaseActor,
   CaseData,
   DetermineInterviewNeedInput,
-  DocumentExtraction,
   MockScenario,
 } from "../types/determineInterviewNeedTypes";
 
@@ -40,33 +39,6 @@ const baseCaseData: CaseData = {
 
 const standardExpeditedScreening = "NOT_EXPEDITED";
 
-const verifiedDocuments: DocumentExtraction = {
-  documents: [
-    {
-      documentId: "DOC-VERIFIED-PAYSTUB",
-      documentType: "Paystub",
-      status: "Verified",
-      confidence: 0.94,
-      reusable: true,
-      fileName: "Michael_Motorist_Pay_Stub_SAMPLE.pdf",
-      requiresWorkerReview: false,
-    },
-    {
-      documentId: "DOC-VERIFIED-LICENSE",
-      documentType: "Driver License",
-      status: "Verified",
-      confidence: 0.97,
-      reusable: true,
-      fileName: "fake-license.jpg",
-      requiresWorkerReview: false,
-    },
-  ],
-  documentReviewNeeded: false,
-  lowestConfidence: 0.94,
-  missingRequiredDocuments: [],
-  insufficientDocuments: [],
-};
-
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
@@ -74,7 +46,7 @@ function clone<T>(value: T): T {
 function buildInput(
   caseData: CaseData,
   expeditedScreeningResult = standardExpeditedScreening,
-  documentExtraction: DocumentExtraction = verifiedDocuments,
+  documentExtraction: unknown | null = null,
 ): DetermineInterviewNeedInput {
   return {
     caseData,
@@ -106,42 +78,12 @@ const scenario1002 = buildInput(
   "EXPEDITED_LOW_INCOME_RESOURCE",
 );
 
-const scenario1003 = buildInput(
-  withCase("MYB-1003", "875db17a-bb69-f111-8fcb-002248a04003", 2),
-  standardExpeditedScreening,
-  {
-    ...clone(verifiedDocuments),
-    missingRequiredDocuments: ["Proof of Residence"],
-    insufficientDocuments: ["Proof of Residence"],
-  },
-);
+const scenario1003: DetermineInterviewNeedInput = {
+  caseData: withCase("MYB-1003", "875db17a-bb69-f111-8fcb-002248a04003", 2),
+  expeditedScreeningResult: standardExpeditedScreening,
+};
 
-const scenario1004 = buildInput(clone(baseCaseData), standardExpeditedScreening, {
-  documents: [
-    {
-      documentId: "DOC-LOW-PAYSTUB",
-      documentType: "Paystub",
-      status: "Low Confidence Review",
-      confidence: 0.74,
-      reusable: false,
-      fileName: "Michael_Motorist_Pay_Stub_SAMPLE.pdf",
-      requiresWorkerReview: true,
-    },
-    {
-      documentId: "DOC-VERIFIED-LICENSE",
-      documentType: "Driver License",
-      status: "Verified",
-      confidence: 0.96,
-      reusable: true,
-      fileName: "fake-license.jpg",
-      requiresWorkerReview: false,
-    },
-  ],
-  documentReviewNeeded: true,
-  lowestConfidence: 0.74,
-  missingRequiredDocuments: [],
-  insufficientDocuments: ["Paystub"],
-});
+const scenario1004 = buildInput(clone(baseCaseData), standardExpeditedScreening, null);
 
 const clearanceCase = withCase(
   "MYB-1005",
@@ -174,22 +116,22 @@ export const mockDetermineInterviewNeedScenarios: MockScenario[] = [
   },
   {
     scenarioId: "MYB-1003",
-    description: "Missing required residence document.",
+    description: "Omitted document extraction is ignored.",
     inputs: scenario1003,
     expected: {
       shouldCreateHumanTask: true,
-      reasonCodes: ["MISSING_REQUIRED_DOCUMENT"],
+      reasonCodes: ["SNAP_INTERVIEW_REQUIRED"],
       nextRecommendedStepIncludes: "Create Interview",
     },
   },
   {
     scenarioId: "MYB-2D8U66GM",
-    description: "Provided case data with low-confidence paystub.",
+    description: "Provided case data with critical priority and null document extraction.",
     inputs: scenario1004,
     expected: {
       shouldCreateHumanTask: true,
       recommendedPriority: "Critical",
-      reasonCodes: ["DOCUMENT_REVIEW_PAYSTUB_LOW_CONFIDENCE"],
+      reasonCodes: ["SNAP_INTERVIEW_REQUIRED"],
     },
   },
   {

@@ -66,6 +66,18 @@ const splitInputTask = composeTaskDataFromActionInput({
   budget: mockFinalReviewTask.budget,
 });
 
+const nullableWorkerInputTask = composeTaskDataFromActionInput({
+  supervisorFlag: false,
+  caseInfo: {},
+  previousWorkerDecision: null,
+  previousWorkerNotes: null,
+  documentExtractionInfo: mockFinalReviewTask.extractedApplication,
+  documentReview: mockFinalReviewTask.documentReview,
+  clearanceReview: mockFinalReviewTask.clearanceReview,
+  externalValidation: mockFinalReviewTask.externalValidation,
+  budget: mockFinalReviewTask.budget,
+});
+
 assertCheck(Boolean(splitInputTask), 'Split action inputs must compose into task data.', failures);
 assertCheck(splitInputTask?.caseHeader.myBNumber === 'MYB-1004', 'Split inputs must preserve MyB number.', failures);
 assertCheck(
@@ -82,6 +94,22 @@ assertCheck(
 assertCheck(
   splitInputTask?.previousWorkerReview.decision === 'SendToSupervisor',
   'Supervisor inputs must preserve previous worker decision.',
+  failures,
+);
+assertCheck(Boolean(nullableWorkerInputTask), 'Empty caseInfo and null prior worker fields must compose task data.', failures);
+assertCheck(
+  nullableWorkerInputTask?.caseHeader.myBNumber === mockFinalReviewTask.caseHeader.myBNumber,
+  'Empty caseInfo must fall back to the demo case header.',
+  failures,
+);
+assertCheck(
+  nullableWorkerInputTask?.previousWorkerReview.decision === '',
+  'Null previous worker decision must render as empty.',
+  failures,
+);
+assertCheck(
+  nullableWorkerInputTask?.previousWorkerReview.workerNotes === '',
+  'Null previous worker notes must render as empty.',
   failures,
 );
 
@@ -116,6 +144,7 @@ const result = {
     q21Q22RequireDynamicText: requiresDynamicText(['Q21']) && requiresDynamicText(['Q22']),
     splitInputsComposeTaskData: Boolean(splitInputTask),
     splitPreviousWorkerInputsPreserved: splitInputTask?.previousWorkerReview.decision === 'SendToSupervisor',
+    nullableWorkerInputsAccepted: nullableWorkerInputTask?.previousWorkerReview.decision === '',
     supervisorReviewMode: splitInputTask?.taskContext.isSupervisorReview === true && minimalSupervisorWithdraw.valid,
   },
 };

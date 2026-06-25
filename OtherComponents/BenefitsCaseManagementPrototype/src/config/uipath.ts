@@ -177,7 +177,7 @@ export const ACTION_APP_DEFINITIONS: ActionAppDefinition[] = [
     lane: 'Case Worker',
     tab: 'Interview / Missing Info',
     editUrl: 'https://cloud.uipath.com/itsmaestropoc/IES/orchestrator_/apps/27887b64-1820-4656-8e2b-7a52bc5b1391/edit?tid=113337&fid=426806',
-    keywords: ['cp1.6', 'complete interview', 'interview complete'],
+    keywords: ['cp1.6', 'complete interview', 'interview complete', 'CP1_Complete'],
   },
   {
     id: 'cp2-4-review-low-confidence-document',

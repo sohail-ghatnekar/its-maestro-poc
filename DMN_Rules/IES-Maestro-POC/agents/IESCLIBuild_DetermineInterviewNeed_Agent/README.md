@@ -15,7 +15,7 @@ The agent is advisory only. It does not approve benefits, deny benefits, or repl
 Top-level inputs:
 
 - `caseData`: Case Management/Data Service case record, including `MyBNumber`, `Id`, file path fields, worker assignment, stage/status, priority, and filing metadata.
-- `documentExtraction`: Document extraction summary with submitted documents, confidence values, missing required documents, and insufficient documents.
+- `documentExtraction`: Optional/null document extraction data. It may be omitted and is ignored for this review for now.
 - `expeditedScreeningResult`: Plain text expedited screening result, such as `NOT_EXPEDITED` or `EXPEDITED_LOW_INCOME_RESOURCE`.
 
 See [docs/data-contract.md](docs/data-contract.md) for sample JSON.

@@ -1192,8 +1192,8 @@ function Field({ label, value, wide = false }: { label: string; value: ReactNode
   );
 }
 
-function StatusPill({ status }: { status: string }) {
-  return <span className={`status-pill ${toStatusClass(status)}`}>{status}</span>;
+function StatusPill({ status }: { status: string | null | undefined }) {
+  return <span className={`status-pill ${toStatusClass(status)}`}>{status || 'Not provided'}</span>;
 }
 
 function DataTable({ headers, rows }: { headers: string[]; rows: ReactNode[][] }) {

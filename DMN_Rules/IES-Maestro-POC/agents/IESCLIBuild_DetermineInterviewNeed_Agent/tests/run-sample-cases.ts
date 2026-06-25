@@ -80,23 +80,6 @@ for (const scenario of mockDetermineInterviewNeedScenarios) {
     );
   }
 
-  if (
-    scenario.expected.reasonCodes?.includes(
-      "DOCUMENT_REVIEW_PAYSTUB_LOW_CONFIDENCE",
-    )
-  ) {
-    assertCondition(
-      output.humanTaskRecommendation !== null,
-      `${scenario.scenarioId}: expected humanTaskRecommendation to exist`,
-    );
-    assertCondition(
-      output.agentReview.missingInfoItems.some((item) =>
-        item.label.toLowerCase().includes("paystub"),
-      ),
-      `${scenario.scenarioId}: expected paystub follow-up missing info item`,
-    );
-  }
-
   assertCondition(
     !/case is eligible|case is ineligible|benefits should be approved|benefits should be denied/i.test(
       JSON.stringify(output),

@@ -205,22 +205,24 @@ export interface FinalReviewTaskData {
   audit: AuditTrail;
 }
 
+export type SplitCaseInfoInput = Partial<CaseHeader & TaskContext> & {
+  reviewChecklist?: Partial<ReviewChecklist>;
+  audit?: AuditTrail;
+};
+
 export interface SplitFinalReviewTaskInputs {
   isSupervisorReview?: boolean;
   supervisorFlag?: boolean;
-  caseInfo: Partial<CaseHeader & TaskContext> & {
-    reviewChecklist?: Partial<ReviewChecklist>;
-    audit?: AuditTrail;
-  };
+  caseInfo?: SplitCaseInfoInput;
   documentInfo?: unknown;
   documentExtractionInfo: Partial<ExtractedApplication>;
   documentReview: Partial<DocumentReview>;
   clearanceReview: Partial<ClearanceReview>;
   externalValidation: Partial<ExternalValidation>;
   budget: Partial<BudgetReview>;
-  previousWorkerDecision?: string;
-  previousWorkerNotes?: string;
-  previousWorkerReview?: Partial<PreviousWorkerReview>;
+  previousWorkerDecision?: string | null;
+  previousWorkerNotes?: string | null;
+  previousWorkerReview?: Partial<PreviousWorkerReview> | null;
 }
 
 export interface StatusUpdate {

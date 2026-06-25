@@ -61,12 +61,12 @@ export function summarizeGrossIncome(items: IncomeItem[]): string {
   }
 
   return items
-    .map((item) => `${item.person}: ${formatCurrency(item.grossAmount)} ${item.frequency.toLowerCase()}`)
+    .map((item) => `${item.person}: ${formatCurrency(item.grossAmount)} ${(item.frequency || 'Unknown').toLowerCase()}`)
     .join('; ');
 }
 
-export function toStatusClass(status: string): string {
-  const normalized = status.toLowerCase();
+export function toStatusClass(status: string | null | undefined): string {
+  const normalized = status?.toLowerCase() || '';
 
   if (normalized.includes('approved') || normalized.includes('complete') || normalized.includes('resolved')) {
     return 'status-green';

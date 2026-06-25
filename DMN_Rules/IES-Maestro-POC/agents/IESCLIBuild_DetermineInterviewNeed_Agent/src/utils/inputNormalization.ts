@@ -11,7 +11,6 @@ const DEFAULT_POLICY_CONFIG = {
   defaultInterviewMethod: "Phone",
   allowInPersonIfRequested: true,
   expeditedInterviewPriority: true,
-  lowDocumentConfidenceThreshold: 0.85,
   dueSoonDays: 7,
 };
 
@@ -239,7 +238,6 @@ export function normalizeDetermineInterviewNeedInput(
       filingAccepted: true,
     },
     expeditedScreeningResult: expedited,
-    documentExtraction: inputs.documentExtraction,
     priorInterviewState: {
       interviewTaskAlreadyOpen: false,
       lastInterviewCompleted: false,

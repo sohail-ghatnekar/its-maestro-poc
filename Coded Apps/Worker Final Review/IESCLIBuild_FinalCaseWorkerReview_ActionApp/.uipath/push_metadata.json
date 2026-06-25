@@ -1,8 +1,8 @@
 {
-  "schemaVersion": "4.8.0",
-  "projectId": "43e29158-d25a-4e7a-b5a2-9e6656055ba4",
+  "schemaVersion": "4.10.0",
+  "projectId": "93c97cf8-8aa0-4f17-9c2e-114592ed3417",
   "description": "",
-  "lastPushDate": "2026-06-18T16:17:21.573Z",
+  "lastPushDate": "2026-06-25T14:43:09.483Z",
   "lastPushAuthor": "sohail.ghatnekar@uipath.com",
   "buildDir": "dist"
 }

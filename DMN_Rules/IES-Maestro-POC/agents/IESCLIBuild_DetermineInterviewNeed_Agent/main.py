@@ -15,8 +15,9 @@ class Input(BaseModel):
     expeditedScreeningResult: str = Field(
         ..., description="Expedited screening result text."
     )
-    documentExtraction: dict[str, Any] = Field(
-        ..., description="Document extraction summary."
+    documentExtraction: Any = Field(
+        default=None,
+        description="Document extraction data. Accepted as null and ignored.",
     )
 
 
@@ -50,19 +51,6 @@ REASON_TEXT = {
         "Applicant response is already pending, so another outreach task should "
         "not be created yet."
     ),
-    "DOCUMENT_LOW_CONFIDENCE": (
-        "One or more document extraction confidence scores are below the "
-        "configured threshold."
-    ),
-    "DOCUMENT_REVIEW_PAYSTUB_LOW_CONFIDENCE": (
-        "Paystub extraction confidence is below the configured threshold."
-    ),
-    "DOCUMENT_INSUFFICIENT": (
-        "One or more submitted documents may be insufficient for worker review."
-    ),
-    "MISSING_REQUIRED_DOCUMENT": (
-        "One or more required documents are missing from the extraction summary."
-    ),
     "INCOME_CONFIRMATION_NEEDED": (
         "Reported income includes an item that requires worker confirmation."
     ),
@@ -88,7 +76,6 @@ DEFAULT_POLICY_CONFIG: dict[str, Any] = {
     "defaultInterviewMethod": "Phone",
     "allowInPersonIfRequested": True,
     "expeditedInterviewPriority": True,
-    "lowDocumentConfidenceThreshold": 0.85,
     "dueSoonDays": 7,
 }
 
@@ -281,7 +268,6 @@ def _build_internal_data(data: dict[str, Any]) -> dict[str, Any]:
     expedited = _parse_expedited_screening_result(
         data.get("expeditedScreeningResult")
     )
-    documents = data.get("documentExtraction") or {}
     created_by = _get_any(case_data, "CreatedBy", "createdBy") or {}
 
     my_b_number = str(_get_any(case_data, "MyBNumber", "myBNumber") or "")
@@ -384,7 +370,6 @@ def _build_internal_data(data: dict[str, Any]) -> dict[str, Any]:
             "filingAccepted": True,
         },
         "expeditedScreeningResult": expedited,
-        "documentExtraction": documents,
         "priorInterviewState": {
             "interviewTaskAlreadyOpen": False,
             "lastInterviewCompleted": False,
@@ -405,32 +390,10 @@ def _safe_token(value: str) -> str:
     return "_".join(part for part in token.split("_") if part)
 
 
-def _document_reason_code(document_type: str) -> str:
-    return f"DOCUMENT_REVIEW_{_safe_token(document_type) or 'DOCUMENT'}_LOW_CONFIDENCE"
-
-
 def _missing_item_id(category: str, label: str, sequence: int = 1) -> str:
-    if category == "Document":
-        return f"MI-DOC-{_safe_token(label) or 'DOCUMENT'}-{sequence:03d}"
     if category == "Income":
         return f"MI-INCOME-{sequence:03d}"
     return f"MI-{_safe_token(label) or 'ITEM'}-{sequence:03d}"
-
-
-def _document_missing_item(document_type: str, sequence: int) -> dict[str, Any]:
-    lower_type = document_type.lower()
-    label = (
-        "Confirm or replace paystub"
-        if lower_type == "paystub"
-        else f"Confirm or replace {lower_type or 'document'}"
-    )
-    return {
-        "itemId": _missing_item_id("Document", document_type or "Document", sequence),
-        "label": label,
-        "category": "Document",
-        "required": True,
-        "source": "documentExtraction",
-    }
 
 
 def _join_list(values: list[str]) -> str:
@@ -447,7 +410,6 @@ def _validate(data: dict[str, Any]) -> list[str]:
     required_groups = [
         "caseData",
         "expeditedScreeningResult",
-        "documentExtraction",
     ]
     for group in required_groups:
         if not data.get(group):
@@ -465,20 +427,6 @@ def _validate(data: dict[str, Any]) -> list[str]:
     if not isinstance(data["expeditedScreeningResult"], str):
         errors.append("expeditedScreeningResult must be a string.")
 
-    documents = data["documentExtraction"].get("documents", [])
-    if not isinstance(documents, list):
-        errors.append("documentExtraction.documents must be an array.")
-    else:
-        for document in documents:
-            if not isinstance(document, dict):
-                errors.append("documentExtraction.documents values must be objects.")
-                continue
-            confidence = document.get("confidence")
-            if confidence is not None and not isinstance(confidence, (int, float)):
-                errors.append(
-                    "documentExtraction.documents confidence values must be numbers."
-                )
-
     return errors
 
 
@@ -488,7 +436,6 @@ def _heuristics(data: dict[str, Any]) -> dict[str, Any]:
     application = data["applicationExtraction"]
     intake = data["intakeRuleResult"]
     expedited = data["expeditedScreeningResult"]
-    documents = data["documentExtraction"]
     prior = data["priorInterviewState"]
     policy = data["policyConfig"]
 
@@ -550,33 +497,6 @@ def _heuristics(data: dict[str, Any]) -> dict[str, Any]:
         result["recommendedWorkerActions"].append(
             "Prioritize interview scheduling for expedited screening."
         )
-
-    threshold = policy.get("lowDocumentConfidenceThreshold", 0.85)
-    sequence = 1
-    for document in documents.get("documents", []):
-        confidence = document.get("confidence")
-        if isinstance(confidence, (int, float)) and confidence < threshold:
-            document_type = str(document.get("documentType", "Document"))
-            _add_unique(result["reasonCodes"], "DOCUMENT_LOW_CONFIDENCE")
-            _add_unique(result["reasonCodes"], _document_reason_code(document_type))
-            result["missingInfoItems"].append(
-                _document_missing_item(document_type, sequence)
-            )
-            sequence += 1
-            result["recommendedWorkerActions"].append(
-                "Ask applicant for replacement "
-                f"{document_type.lower()} if current document is insufficient."
-            )
-
-    for missing_document in documents.get("missingRequiredDocuments", []):
-        _add_unique(result["reasonCodes"], "MISSING_REQUIRED_DOCUMENT")
-        result["missingInfoItems"].append(
-            _document_missing_item(str(missing_document), sequence)
-        )
-        sequence += 1
-
-    if documents.get("insufficientDocuments"):
-        _add_unique(result["reasonCodes"], "DOCUMENT_INSUFFICIENT")
 
     if any(item.get("requiresWorkerConfirmation") for item in application.get("income", [])):
         _add_unique(result["reasonCodes"], "INCOME_CONFIRMATION_NEEDED")
@@ -711,8 +631,6 @@ def _suggested_message(heuristic: dict[str, Any]) -> str:
 
 def _confidence(heuristic: dict[str, Any]) -> float:
     confidence = 0.93
-    if "DOCUMENT_LOW_CONFIDENCE" in heuristic["reasonCodes"]:
-        confidence -= 0.03
     if "INCOME_CONFIRMATION_NEEDED" in heuristic["reasonCodes"]:
         confidence -= 0.01
     if "INTAKE_NOT_READY" in heuristic["reasonCodes"]:

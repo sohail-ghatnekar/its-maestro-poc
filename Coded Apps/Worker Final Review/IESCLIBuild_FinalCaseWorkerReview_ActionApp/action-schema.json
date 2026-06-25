@@ -4,8 +4,8 @@
     "properties": {
       "caseInfo": {
         "type": "object",
-        "required": true,
-        "description": "UiPath case record object. Supports fields such as MyBNumber, ApplicantEmail, AssignedWorker, CurrentStatus, CurrentStage, Priority, FilingDate, CreateTime, UpdateTime, Id, FolderID, MaestroProcessID, and file path fields."
+        "required": false,
+        "description": "Optional UiPath case record object. Empty, null, or omitted values fall back to the demo case record. Supports fields such as MyBNumber, ApplicantEmail, AssignedWorker, CurrentStatus, CurrentStage, Priority, FilingDate, CreateTime, UpdateTime, Id, FolderID, MaestroProcessID, and file path fields."
       },
       "supervisorFlag": {
         "type": "boolean",
@@ -15,12 +15,12 @@
       "previousWorkerDecision": {
         "type": "string",
         "required": false,
-        "description": "Previous worker's submitted decision for supervisor review context."
+        "description": "Optional previous worker submitted decision for supervisor review context. Null or empty values are allowed."
       },
       "previousWorkerNotes": {
         "type": "string",
         "required": false,
-        "description": "Previous worker's submitted notes for supervisor review context."
+        "description": "Optional previous worker submitted notes for supervisor review context. Null or empty values are allowed."
       }
     }
   },

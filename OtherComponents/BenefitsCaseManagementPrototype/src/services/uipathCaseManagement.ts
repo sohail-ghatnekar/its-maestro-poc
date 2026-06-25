@@ -743,12 +743,36 @@ function getTaskSearchText(task: TaskGetResponse): string {
   return parts.filter(Boolean).join(' ').toLowerCase();
 }
 
+function extractCpStepCode(value: string): string | null {
+  const normalizedValue = value.toLowerCase();
+  const match = normalizedValue.match(/\bcp\s*([0-9]+(?:\.[0-9]+)?)\b/);
+
+  return match ? `cp${match[1]}` : null;
+}
+
+function getDefinitionCpStepCode(definition: ActionAppDefinition): string | null {
+  return extractCpStepCode(definition.name);
+}
+
 export function inferActionAppDefinition(task: TaskGetResponse): ActionAppDefinition | null {
   const searchText = getTaskSearchText(task);
   const scoredDefinitions = ACTION_APP_DEFINITIONS
     .map((definition) => {
-      const appIdMatch = definition.appId && searchText.includes(definition.appId.toLowerCase()) ? 120 : 0;
-      const nameMatch = searchText.includes(definition.name.toLowerCase()) ? 40 : 0;
+      const taskStepCode = extractCpStepCode(searchText);
+      const definitionStepCode = getDefinitionCpStepCode(definition);
+
+      if (taskStepCode && definitionStepCode && taskStepCode !== definitionStepCode) {
+        return { definition, score: 0 };
+      }
+
+      const definitionsUsingSameApp = ACTION_APP_DEFINITIONS.filter((candidate) =>
+        candidate.appId === definition.appId
+      ).length;
+      const appIdMatch = definition.appId && searchText.includes(definition.appId.toLowerCase())
+        ? definitionsUsingSameApp > 1 ? 24 : 120
+        : 0;
+      const stepCodeMatch = taskStepCode && definitionStepCode && taskStepCode === definitionStepCode ? 90 : 0;
+      const nameMatch = searchText.includes(definition.name.toLowerCase()) ? 80 : 0;
       const appNameMatch = searchText.includes(definition.appName.toLowerCase()) ? 12 : 0;
       const processMatch = searchText.includes(definition.process.toLowerCase()) ? 4 : 0;
       const keywordScore = definition.keywords.reduce((score, keyword) => {
@@ -763,7 +787,7 @@ export function inferActionAppDefinition(task: TaskGetResponse): ActionAppDefini
 
       return {
         definition,
-        score: appIdMatch + nameMatch + appNameMatch + processMatch + keywordScore,
+        score: appIdMatch + stepCodeMatch + nameMatch + appNameMatch + processMatch + keywordScore,
       };
     })
     .filter((result) => result.score > 0)

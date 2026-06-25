@@ -1,7 +1,6 @@
 import type {
   CaseData,
   DetermineInterviewNeedInput,
-  DocumentExtraction,
   ValidationResult,
 } from "../types/determineInterviewNeedTypes";
 
@@ -79,51 +78,12 @@ export function validateExpeditedScreeningResult(
   return result;
 }
 
-export function validateDocumentExtraction(
-  documentExtraction: DocumentExtraction,
-): ValidationResult {
-  const result = ok();
-
-  if (!Array.isArray(documentExtraction?.documents)) {
-    result.errors.push("documentExtraction.documents must be an array.");
-    result.valid = false;
-    return result;
-  }
-
-  for (const document of documentExtraction.documents) {
-    if (!document || typeof document !== "object") {
-      result.errors.push("documentExtraction.documents values must be objects.");
-      continue;
-    }
-
-    if (
-      document.confidence !== undefined &&
-      typeof document.confidence !== "number"
-    ) {
-      result.errors.push(
-        `documentExtraction.documents.${document.documentId || "document"}.confidence must be number if present.`,
-      );
-    }
-  }
-
-  if (
-    documentExtraction?.lowestConfidence !== undefined &&
-    typeof documentExtraction.lowestConfidence !== "number"
-  ) {
-    result.errors.push("documentExtraction.lowestConfidence must be number.");
-  }
-
-  result.valid = result.errors.length === 0;
-  return result;
-}
-
 export function validateInputs(
   inputs: DetermineInterviewNeedInput,
 ): ValidationResult {
   const requiredGroups: Array<keyof DetermineInterviewNeedInput> = [
     "caseData",
     "expeditedScreeningResult",
-    "documentExtraction",
   ];
 
   const groupResult = ok();
@@ -141,6 +101,5 @@ export function validateInputs(
   return mergeValidationResults([
     validateCaseData(inputs.caseData),
     validateExpeditedScreeningResult(inputs.expeditedScreeningResult),
-    validateDocumentExtraction(inputs.documentExtraction),
   ]);
 }

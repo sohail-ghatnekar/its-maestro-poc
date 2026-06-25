@@ -1,6 +1,5 @@
 import type {
   HeuristicResult,
-  MissingInfoItem,
   NormalizedDetermineInterviewNeedInput,
   Priority,
 } from "../types/determineInterviewNeedTypes";
@@ -23,33 +22,6 @@ function addAction(result: HeuristicResult, action: string): void {
   }
 }
 
-function documentReasonCode(documentType: string): string {
-  const safeType = documentType
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
-  return `DOCUMENT_REVIEW_${safeType || "DOCUMENT"}_LOW_CONFIDENCE`;
-}
-
-function buildDocumentMissingItem(
-  documentType: string,
-  sequence: number,
-): MissingInfoItem {
-  const lowerType = documentType.toLowerCase();
-  const label =
-    lowerType === "paystub"
-      ? "Confirm or replace paystub"
-      : `Confirm or replace ${lowerType || "document"}`;
-
-  return {
-    itemId: createMissingItemId("Document", documentType || "Document", sequence),
-    label,
-    category: "Document",
-    required: true,
-    source: "documentExtraction",
-  };
-}
-
 export function determineInterviewNeedHeuristics(
   inputs: NormalizedDetermineInterviewNeedInput,
 ): HeuristicResult {
@@ -59,7 +31,6 @@ export function determineInterviewNeedHeuristics(
     applicationExtraction,
     intakeRuleResult,
     expeditedScreeningResult,
-    documentExtraction,
     priorInterviewState,
     policyConfig,
   } = inputs;
@@ -134,37 +105,6 @@ export function determineInterviewNeedHeuristics(
     result.recommendedPriority = "Critical";
     addReason(result, "EXPEDITED_INTERVIEW_PRIORITY");
     addAction(result, "Prioritize interview scheduling for expedited screening.");
-  }
-
-  let documentSequence = 1;
-  for (const document of documentExtraction.documents) {
-    if (
-      typeof document.confidence === "number" &&
-      document.confidence < policyConfig.lowDocumentConfidenceThreshold
-    ) {
-      addReason(result, "DOCUMENT_LOW_CONFIDENCE");
-      addReason(result, documentReasonCode(document.documentType));
-      result.missingInfoItems.push(
-        buildDocumentMissingItem(document.documentType, documentSequence),
-      );
-      documentSequence += 1;
-      addAction(
-        result,
-        `Ask applicant for replacement ${document.documentType.toLowerCase()} if current document is insufficient.`,
-      );
-    }
-  }
-
-  for (const missingDocument of documentExtraction.missingRequiredDocuments || []) {
-    addReason(result, "MISSING_REQUIRED_DOCUMENT");
-    result.missingInfoItems.push(
-      buildDocumentMissingItem(missingDocument, documentSequence),
-    );
-    documentSequence += 1;
-  }
-
-  if ((documentExtraction.insufficientDocuments || []).length > 0) {
-    addReason(result, "DOCUMENT_INSUFFICIENT");
   }
 
   const incomeNeedingConfirmation = applicationExtraction.income.filter(

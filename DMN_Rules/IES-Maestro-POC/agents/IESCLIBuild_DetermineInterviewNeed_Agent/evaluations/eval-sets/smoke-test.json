@@ -2,7 +2,7 @@
   "version": "1.0",
   "id": "determine-interview-need-smoke-test",
   "name": "Determine Interview Need Smoke Test",
-  "description": "Smoke coverage for standard interview, expedited priority, and document follow-up.",
+  "description": "Smoke coverage for standard interview, expedited priority, omitted document extraction, and null document extraction.",
   "evaluatorRefs": ["JsonSimilarityEvaluator"],
   "evaluations": [
     {
@@ -21,13 +21,7 @@
           "FilingDate": "2026-06-16",
           "Id": "875db17a-bb69-f111-8fcb-002248a04001"
         },
-        "expeditedScreeningResult": "NOT_EXPEDITED",
-        "documentExtraction": {
-          "documents": [],
-          "lowestConfidence": 1,
-          "missingRequiredDocuments": [],
-          "insufficientDocuments": []
-        }
+        "expeditedScreeningResult": "NOT_EXPEDITED"
       },
       "evaluationCriterias": {
         "JsonSimilarityEvaluator": {
@@ -65,12 +59,7 @@
           "Id": "875db17a-bb69-f111-8fcb-002248a04002"
         },
         "expeditedScreeningResult": "EXPEDITED_LOW_INCOME_RESOURCE",
-        "documentExtraction": {
-          "documents": [],
-          "lowestConfidence": 1,
-          "missingRequiredDocuments": [],
-          "insufficientDocuments": []
-        }
+        "documentExtraction": null
       },
       "evaluationCriterias": {
         "JsonSimilarityEvaluator": {
@@ -89,8 +78,8 @@
       }
     },
     {
-      "id": "test-3-document-follow-up",
-      "name": "Low-confidence paystub",
+      "id": "test-3-null-document-extraction-ignored",
+      "name": "Null document extraction ignored",
       "inputs": {
         "caseData": {
           "ProofofResidenceFilePath": "Michael_Motorist_National_Grid_Utility_SAMPLE.pdf",
@@ -110,22 +99,7 @@
           "Id": "875db17a-bb69-f111-8fcb-002248a04067"
         },
         "expeditedScreeningResult": "NOT_EXPEDITED",
-        "documentExtraction": {
-          "documents": [
-            {
-              "documentId": "DOC-LOW-PAYSTUB",
-              "documentType": "Paystub",
-              "status": "Low Confidence Review",
-              "confidence": 0.74,
-              "reusable": false,
-              "fileName": "Michael_Motorist_Pay_Stub_SAMPLE.pdf",
-              "requiresWorkerReview": true
-            }
-          ],
-          "lowestConfidence": 0.74,
-          "missingRequiredDocuments": [],
-          "insufficientDocuments": ["Paystub"]
-        }
+        "documentExtraction": null
       },
       "evaluationCriterias": {
         "JsonSimilarityEvaluator": {
@@ -135,7 +109,8 @@
             },
             "agentReview": {
               "recommendedPriority": "Critical",
-              "shouldCreateHumanTask": true
+              "shouldCreateHumanTask": true,
+              "missingInfoItems": []
             },
             "errors": []
           }

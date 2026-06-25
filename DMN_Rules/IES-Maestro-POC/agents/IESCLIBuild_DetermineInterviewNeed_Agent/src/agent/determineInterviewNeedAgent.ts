@@ -18,14 +18,6 @@ const REASON_TEXT: Record<string, string> = {
     "An interview task is already open, so a duplicate task should not be created.",
   APPLICANT_RESPONSE_PENDING:
     "Applicant response is already pending, so another outreach task should not be created yet.",
-  DOCUMENT_LOW_CONFIDENCE:
-    "One or more document extraction confidence scores are below the configured threshold.",
-  DOCUMENT_REVIEW_PAYSTUB_LOW_CONFIDENCE:
-    "Paystub extraction confidence is below the configured threshold.",
-  DOCUMENT_INSUFFICIENT:
-    "One or more submitted documents may be insufficient for worker review.",
-  MISSING_REQUIRED_DOCUMENT:
-    "One or more required documents are missing from the extraction summary.",
   INCOME_CONFIRMATION_NEEDED:
     "Reported income includes an item that requires worker confirmation.",
   ACCOMMODATION_REVIEW:
@@ -102,10 +94,6 @@ function buildSuggestedApplicantMessage(
 
 function buildConfidence(heuristicResult: HeuristicResult): number {
   let confidence = 0.93;
-
-  if (heuristicResult.reasonCodes.includes("DOCUMENT_LOW_CONFIDENCE")) {
-    confidence -= 0.03;
-  }
 
   if (heuristicResult.reasonCodes.includes("INCOME_CONFIRMATION_NEEDED")) {
     confidence -= 0.01;

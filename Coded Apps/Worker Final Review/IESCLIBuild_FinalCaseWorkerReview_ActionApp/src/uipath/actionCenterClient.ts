@@ -10,6 +10,14 @@ import type {
 
 type CompletionListener = (payload: { action: FinalAction; data: unknown }) => void;
 type MessageListener = (message: LocalToastMessage) => void;
+type SeverityName = 'Success' | 'Warning' | 'Error' | 'Info';
+
+type CodedActionAppServiceLike = {
+  getTask(): Promise<unknown>;
+  setTaskData(data: unknown): void | Promise<unknown>;
+  completeTask(action: FinalAction, data: unknown): Promise<unknown>;
+  showMessage(message: string, severity: unknown): void;
+};
 
 type SdkTaskEnvelope = {
   data?: unknown;
@@ -43,7 +51,7 @@ function unwrapTaskData(rawTask: unknown): FinalReviewTaskData {
 }
 
 class ActionCenterClient {
-  private readonly service = new CodedActionAppService();
+  private service: CodedActionAppServiceLike | null = null;
   private loadTaskPromise: Promise<ActionCenterLoadResult> | null = null;
   private isCompleting = false;
   private isLocalDemoMode = false;
@@ -82,7 +90,8 @@ class ActionCenterClient {
     }
 
     try {
-      await this.service.setTaskData(data);
+      const service = this.getService();
+      await service.setTaskData(data);
     } catch (error) {
       console.error('setTaskData failed', error);
       this.showError('Unable to save draft changes to Action Center.');
@@ -106,7 +115,8 @@ class ActionCenterClient {
         return { success: true };
       }
 
-      const result = (await this.service.completeTask(action, data)) as TaskCompleteResponse;
+      const service = this.getService();
+      const result = (await service.completeTask(action, data)) as TaskCompleteResponse;
 
       if (result && result.success === false) {
         const message = result.errorMessage || 'Action Center did not complete the task.';
@@ -126,24 +136,25 @@ class ActionCenterClient {
   }
 
   showSuccess(message: string): void {
-    this.showMessage(message, MessageSeverity.Success, 'success');
+    void this.showMessage(message, 'Success', 'success');
   }
 
   showWarning(message: string): void {
-    this.showMessage(message, MessageSeverity.Warning, 'warning');
+    void this.showMessage(message, 'Warning', 'warning');
   }
 
   showError(message: string): void {
-    this.showMessage(message, MessageSeverity.Error, 'error');
+    void this.showMessage(message, 'Error', 'error');
   }
 
   showInfo(message: string): void {
-    this.showMessage(message, MessageSeverity.Info, 'info');
+    void this.showMessage(message, 'Info', 'info');
   }
 
   private async loadTaskInternal(): Promise<ActionCenterLoadResult> {
     try {
-      const rawTask = await this.withTimeout(this.service.getTask(), TASK_LOAD_TIMEOUT_MS);
+      const service = this.getService();
+      const rawTask = await this.withTimeout(service.getTask(), TASK_LOAD_TIMEOUT_MS);
       const taskData = unwrapTaskData(rawTask);
       this.isLocalDemoMode = false;
       this.showInfo('Task loaded.');
@@ -184,14 +195,27 @@ class ActionCenterClient {
     });
   }
 
-  private showMessage(message: string, actionCenterSeverity: MessageSeverity, localSeverity: LocalToastMessage['severity']): void {
+  private getService(): CodedActionAppServiceLike {
+    if (!this.service) {
+      this.service = new CodedActionAppService() as unknown as CodedActionAppServiceLike;
+    }
+
+    return this.service;
+  }
+
+  private async showMessage(
+    message: string,
+    severityName: SeverityName,
+    localSeverity: LocalToastMessage['severity'],
+  ): Promise<void> {
     if (this.isLocalDemoMode) {
       this.emitLocalMessage(message, localSeverity);
       return;
     }
 
     try {
-      this.service.showMessage(message, actionCenterSeverity);
+      const service = this.getService();
+      service.showMessage(message, (MessageSeverity as Record<SeverityName, unknown>)[severityName]);
     } catch (error) {
       console.warn('Action Center showMessage failed, falling back to console.', error);
       console.info(`[${localSeverity}] ${message}`);

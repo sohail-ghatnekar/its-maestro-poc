@@ -10,6 +10,7 @@ import type {
   FinalReviewTaskData,
   PreviousWorkerReview,
   ReviewChecklist,
+  SplitCaseInfoInput,
   SplitFinalReviewTaskInputs,
   TaskContext,
 } from '../types/finalReviewTypes';
@@ -132,6 +133,10 @@ function stringInput(value: unknown): string | undefined {
   return undefined;
 }
 
+function optionalStringInput(value: unknown): string {
+  return stringInput(value) ?? '';
+}
+
 function dateInput(value: unknown): string | undefined {
   const date = stringInput(value);
   return date?.includes('T') ? date.slice(0, 10) : date;
@@ -181,28 +186,71 @@ function priorityInput(value: unknown): string | undefined {
 }
 
 function normalizeCaseInfoInput(
-  caseInfo: SplitFinalReviewTaskInputs['caseInfo'],
-): SplitFinalReviewTaskInputs['caseInfo'] {
-  const record = caseInfo as Record<string, unknown>;
+  caseInfo: SplitCaseInfoInput | undefined,
+): SplitCaseInfoInput {
+  const inputCaseInfo = caseInfo ?? {};
+  const record = inputCaseInfo as Record<string, unknown>;
+  const fallbackCaseInfo = {
+    ...mockFinalReviewTask.taskContext,
+    ...mockFinalReviewTask.caseHeader,
+    reviewChecklist: mockFinalReviewTask.reviewChecklist,
+    audit: mockFinalReviewTask.audit,
+  };
 
   return {
-    ...caseInfo,
-    caseRecordNumber: stringInput(record.caseRecordNumber ?? record.CaseRecordNumber ?? record.Id) ?? caseInfo.caseRecordNumber,
-    myBNumber: stringInput(record.myBNumber ?? record.MyBNumber) ?? caseInfo.myBNumber,
-    applicantName: stringInput(record.applicantName ?? record.ApplicantName) ?? caseInfo.applicantName,
-    applicantEmail: stringInput(record.applicantEmail ?? record.ApplicantEmail) ?? caseInfo.applicantEmail,
-    county: stringInput(record.county ?? record.County) ?? caseInfo.county,
-    derivedRegion: stringInput(record.derivedRegion ?? record.DerivedRegion) ?? caseInfo.derivedRegion,
-    filingDate: dateInput(record.filingDate ?? record.FilingDate ?? record.CreateTime) ?? caseInfo.filingDate,
+    ...fallbackCaseInfo,
+    ...inputCaseInfo,
+    caseRecordNumber:
+      stringInput(record.caseRecordNumber ?? record.CaseRecordNumber ?? record.Id) ??
+      inputCaseInfo.caseRecordNumber ??
+      fallbackCaseInfo.caseRecordNumber,
+    myBNumber: stringInput(record.myBNumber ?? record.MyBNumber) ?? inputCaseInfo.myBNumber ?? fallbackCaseInfo.myBNumber,
+    applicantName:
+      stringInput(record.applicantName ?? record.ApplicantName) ??
+      inputCaseInfo.applicantName ??
+      fallbackCaseInfo.applicantName,
+    applicantEmail:
+      stringInput(record.applicantEmail ?? record.ApplicantEmail) ??
+      inputCaseInfo.applicantEmail ??
+      fallbackCaseInfo.applicantEmail,
+    county: stringInput(record.county ?? record.County) ?? inputCaseInfo.county ?? fallbackCaseInfo.county,
+    derivedRegion:
+      stringInput(record.derivedRegion ?? record.DerivedRegion) ??
+      inputCaseInfo.derivedRegion ??
+      fallbackCaseInfo.derivedRegion,
+    filingDate:
+      dateInput(record.filingDate ?? record.FilingDate ?? record.CreateTime) ??
+      inputCaseInfo.filingDate ??
+      fallbackCaseInfo.filingDate,
     eligibilityDueDate:
-      dateInput(record.eligibilityDueDate ?? record.EligibilityDueDate) ?? caseInfo.eligibilityDueDate,
-    currentStatus: statusInput(record.currentStatus ?? record.CurrentStatus) ?? caseInfo.currentStatus,
-    currentStage: stageInput(record.currentStage ?? record.CurrentStage) ?? caseInfo.currentStage,
-    statusCode: stringInput(record.statusCode ?? record.StatusCode) ?? caseInfo.statusCode,
-    taskId: stringInput(record.taskId ?? record.TaskId ?? record.MaestroProcessID ?? record.Id) ?? caseInfo.taskId,
-    createdAtUtc: stringInput(record.createdAtUtc ?? record.CreateTime) ?? caseInfo.createdAtUtc,
-    assignedWorker: stringInput(record.assignedWorker ?? record.AssignedWorker) ?? caseInfo.assignedWorker,
-    priority: (priorityInput(record.priority ?? record.Priority) ?? caseInfo.priority) as SplitFinalReviewTaskInputs['caseInfo']['priority'],
+      dateInput(record.eligibilityDueDate ?? record.EligibilityDueDate) ??
+      inputCaseInfo.eligibilityDueDate ??
+      fallbackCaseInfo.eligibilityDueDate,
+    currentStatus:
+      statusInput(record.currentStatus ?? record.CurrentStatus) ??
+      inputCaseInfo.currentStatus ??
+      fallbackCaseInfo.currentStatus,
+    currentStage:
+      stageInput(record.currentStage ?? record.CurrentStage) ??
+      inputCaseInfo.currentStage ??
+      fallbackCaseInfo.currentStage,
+    statusCode:
+      stringInput(record.statusCode ?? record.StatusCode) ?? inputCaseInfo.statusCode ?? fallbackCaseInfo.statusCode,
+    taskId:
+      stringInput(record.taskId ?? record.TaskId ?? record.MaestroProcessID ?? record.Id) ??
+      inputCaseInfo.taskId ??
+      fallbackCaseInfo.taskId,
+    createdAtUtc:
+      stringInput(record.createdAtUtc ?? record.CreateTime) ??
+      inputCaseInfo.createdAtUtc ??
+      fallbackCaseInfo.createdAtUtc,
+    assignedWorker:
+      stringInput(record.assignedWorker ?? record.AssignedWorker) ??
+      inputCaseInfo.assignedWorker ??
+      fallbackCaseInfo.assignedWorker,
+    priority: (priorityInput(record.priority ?? record.Priority) ??
+      inputCaseInfo.priority ??
+      fallbackCaseInfo.priority) as SplitCaseInfoInput['priority'],
   };
 }
 
@@ -311,18 +359,16 @@ function buildBudget(budget: Partial<BudgetReview>): BudgetReview {
 }
 
 function normalizePreviousWorkerReview(
-  previousWorkerReview: Partial<PreviousWorkerReview> | undefined,
+  previousWorkerReview: Partial<PreviousWorkerReview> | null | undefined,
   envelope?: InputEnvelope,
 ): PreviousWorkerReview {
   return {
     ...mockFinalReviewTask.previousWorkerReview,
-    ...previousWorkerReview,
+    ...(previousWorkerReview ?? {}),
     decision:
-      stringInput(previousWorkerReview?.decision ?? envelope?.previousWorkerDecision) ??
-      mockFinalReviewTask.previousWorkerReview.decision,
+      optionalStringInput(previousWorkerReview?.decision ?? envelope?.previousWorkerDecision),
     workerNotes:
-      stringInput(previousWorkerReview?.workerNotes ?? envelope?.previousWorkerNotes) ??
-      mockFinalReviewTask.previousWorkerReview.workerNotes,
+      optionalStringInput(previousWorkerReview?.workerNotes ?? envelope?.previousWorkerNotes),
     submittedBy:
       stringInput(previousWorkerReview?.submittedBy ?? envelope?.previousWorkerSubmittedBy) ??
       mockFinalReviewTask.previousWorkerReview.submittedBy,
@@ -382,18 +428,19 @@ export function composeTaskDataFromSplitInputs(inputs: SplitFinalReviewTaskInput
   const clearanceReview = buildClearanceReview(inputs.clearanceReview);
   const externalValidation = buildExternalValidation(inputs.externalValidation);
   const budget = buildBudget(inputs.budget);
+  const caseInfo = normalizeCaseInfoInput(inputs.caseInfo);
   const isSupervisorReview =
     inputs.supervisorFlag ??
     inputs.isSupervisorReview ??
-    inputs.caseInfo.isSupervisorReview ??
+    caseInfo.isSupervisorReview ??
     mockFinalReviewTask.taskContext.isSupervisorReview;
 
   return {
-    taskContext: buildTaskContext(inputs.caseInfo, isSupervisorReview),
-    caseHeader: buildCaseHeader(inputs.caseInfo),
+    taskContext: buildTaskContext(caseInfo, isSupervisorReview),
+    caseHeader: buildCaseHeader(caseInfo),
     extractedApplication: buildExtractedApplication(inputs.documentExtractionInfo),
     reviewChecklist: buildReviewChecklist(
-      inputs.caseInfo.reviewChecklist,
+      caseInfo.reviewChecklist,
       documentReview,
       clearanceReview,
       externalValidation,
@@ -409,7 +456,7 @@ export function composeTaskDataFromSplitInputs(inputs: SplitFinalReviewTaskInput
       inputs.previousWorkerReview,
       envelope ?? (inputs as unknown as InputEnvelope),
     ),
-    audit: buildAudit(inputs.caseInfo.audit),
+    audit: buildAudit(caseInfo.audit),
   };
 }
 
@@ -439,7 +486,7 @@ export function composeTaskDataFromActionInput(value: unknown): FinalReviewTaskD
     return null;
   }
 
-  const caseInfo = normalizeCaseInfoInput(objectInput<SplitFinalReviewTaskInputs['caseInfo']>(envelope.caseInfo));
+  const caseInfo = normalizeCaseInfoInput(objectInput<SplitCaseInfoInput>(envelope.caseInfo));
   const documentInfo = objectInput<Record<string, unknown>>(envelope.documentInfo);
 
   return composeTaskDataFromSplitInputs({
