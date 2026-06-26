@@ -46,6 +46,9 @@ export type ActionAppDefinition = {
   tab: LiveActionAppTab;
   editUrl: string;
   keywords: string[];
+  taskCode?: string;
+  sequenceGroup?: string;
+  sequenceOrder?: number;
 };
 
 export const IES_WORKFLOW_CONFIG = {
@@ -156,6 +159,9 @@ export const ACTION_APP_DEFINITIONS: ActionAppDefinition[] = [
     lane: 'Case Worker',
     tab: 'Interview / Missing Info',
     editUrl: 'https://cloud.uipath.com/itsmaestropoc/IES/orchestrator_/apps/27887b64-1820-4656-8e2b-7a52bc5b1391/edit?tid=113337&fid=426806',
+    taskCode: 'cp1.3',
+    sequenceGroup: 'cp1-interview',
+    sequenceOrder: 1,
     keywords: [
       'cp1.3',
       'conduct interview',
@@ -177,6 +183,9 @@ export const ACTION_APP_DEFINITIONS: ActionAppDefinition[] = [
     lane: 'Case Worker',
     tab: 'Interview / Missing Info',
     editUrl: 'https://cloud.uipath.com/itsmaestropoc/IES/orchestrator_/apps/27887b64-1820-4656-8e2b-7a52bc5b1391/edit?tid=113337&fid=426806',
+    taskCode: 'cp1.6',
+    sequenceGroup: 'cp1-interview',
+    sequenceOrder: 2,
     keywords: ['cp1.6', 'complete interview', 'interview complete', 'CP1_Complete'],
   },
   {
@@ -188,6 +197,9 @@ export const ACTION_APP_DEFINITIONS: ActionAppDefinition[] = [
     lane: 'Case Worker',
     tab: 'Documents',
     editUrl: 'https://cloud.uipath.com/itsmaestropoc/IES/orchestrator_/apps/1739c2bc-4f98-4815-b401-a949bf6ed225/edit?tid=113337&fid=426806',
+    taskCode: 'cp2.4',
+    sequenceGroup: 'cp2-document-review',
+    sequenceOrder: 1,
     keywords: ['cp2.4', 'review low-confidence document', 'low confidence document', 'low-confidence document'],
   },
   {
@@ -199,6 +211,9 @@ export const ACTION_APP_DEFINITIONS: ActionAppDefinition[] = [
     lane: 'Case Worker',
     tab: 'Documents',
     editUrl: 'https://cloud.uipath.com/itsmaestropoc/IES/orchestrator_/apps/1739c2bc-4f98-4815-b401-a949bf6ed225/edit?tid=113337&fid=426806',
+    taskCode: 'cp2.5',
+    sequenceGroup: 'cp2-document-review',
+    sequenceOrder: 2,
     keywords: [
       'cp2.5',
       'mark document verified',
@@ -218,6 +233,9 @@ export const ACTION_APP_DEFINITIONS: ActionAppDefinition[] = [
     lane: 'Case Worker',
     tab: 'Clearance',
     editUrl: 'https://cloud.uipath.com/itsmaestropoc/IES/orchestrator_/apps/2bb8ea92-bbd4-4fd2-8623-dbab4da19666/edit?tid=113337&fid=426806',
+    taskCode: 'cp3.5',
+    sequenceGroup: 'cp3-cin-matching',
+    sequenceOrder: 1,
     keywords: ['cp3.5', 'assign request new cin', 'assign/request new cin', 'request new cin', 'assign new cin'],
   },
   {
@@ -229,6 +247,9 @@ export const ACTION_APP_DEFINITIONS: ActionAppDefinition[] = [
     lane: 'Case Worker',
     tab: 'Clearance',
     editUrl: 'https://cloud.uipath.com/itsmaestropoc/IES/orchestrator_/apps/2bb8ea92-bbd4-4fd2-8623-dbab4da19666/edit?tid=113337&fid=426806',
+    taskCode: 'cp3.6',
+    sequenceGroup: 'cp3-cin-matching',
+    sequenceOrder: 2,
     keywords: [
       'cp3.6',
       'capture override reason',

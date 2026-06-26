@@ -745,13 +745,13 @@ function getTaskSearchText(task: TaskGetResponse): string {
 
 function extractCpStepCode(value: string): string | null {
   const normalizedValue = value.toLowerCase();
-  const match = normalizedValue.match(/\bcp\s*([0-9]+(?:\.[0-9]+)?)\b/);
+  const match = normalizedValue.match(/\bcp\s*([0-9]+)\s*[._-]\s*([0-9]+)\b/);
 
-  return match ? `cp${match[1]}` : null;
+  return match ? `cp${match[1]}.${match[2]}` : null;
 }
 
 function getDefinitionCpStepCode(definition: ActionAppDefinition): string | null {
-  return extractCpStepCode(definition.name);
+  return definition.taskCode || extractCpStepCode(definition.name);
 }
 
 export function inferActionAppDefinition(task: TaskGetResponse): ActionAppDefinition | null {
@@ -1919,6 +1919,14 @@ export async function completeLiveTask(sdk: UiPath, task: LiveTaskSummary) {
     data: latestTask.data ?? {},
     action,
   });
+}
+
+export async function fetchLiveTaskById(sdk: UiPath, taskId: number): Promise<LiveTaskSummary | null> {
+  const tasks = new Tasks(sdk);
+  const task = await tasks.getById(taskId, undefined, IES_WORKFLOW_CONFIG.orchestratorFolderId)
+    .catch(() => null);
+
+  return task && !task.isDeleted ? normalizeTask(task) : null;
 }
 
 export function getTasksForTab(tasks: LiveTaskSummary[], tab: LiveActionAppTab): LiveTaskSummary[] {

@@ -1,9 +1,9 @@
 {
   "name": "ies-maestro-poc",
   "displayName": "ies-maestro-poc",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "IES Maestro case management coded app",
   "author": "Sohail Ghatnekar",
   "contentType": "webapp",
-  "createdAt": "2026-06-22T17:46:39.982Z"
+  "createdAt": "2026-06-26T18:54:13.948Z"
 }

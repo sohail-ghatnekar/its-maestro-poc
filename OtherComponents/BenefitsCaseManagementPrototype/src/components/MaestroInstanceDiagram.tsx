@@ -68,7 +68,6 @@ type MaestroInstanceDiagramProps = {
   instanceId: string | null;
   folderKey: string;
   caseNumber: string;
-  onOpenMaestro?: () => void;
 };
 
 type JsonRecord = Record<string, unknown>;
@@ -610,7 +609,6 @@ export function MaestroInstanceDiagram({
   instanceId,
   folderKey,
   caseNumber,
-  onOpenMaestro,
 }: MaestroInstanceDiagramProps) {
   const [containerElement, setContainerElement] = useState<HTMLDivElement | null>(null);
   const [loadState, setLoadState] = useState<DiagramLoadState>('idle');
@@ -772,16 +770,6 @@ export function MaestroInstanceDiagram({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {onOpenMaestro && (
-            <button
-              type="button"
-              onClick={onOpenMaestro}
-              disabled={!instanceId}
-              className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Open Maestro
-            </button>
-          )}
           <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
             <span className="sr-only">Live update interval</span>
             <select

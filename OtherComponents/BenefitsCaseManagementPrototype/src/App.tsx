@@ -17,6 +17,7 @@ import {
   fetchApplicationPdfFromBucket,
   fetchDocumentFromBucket,
   fetchLiveCaseRecords,
+  fetchLiveTaskById,
   fetchMaestroInstanceContext,
   fetchTaskAssignmentRecords,
   findMatchingLiveRecord,
@@ -25,7 +26,6 @@ import {
   getLiveRecordFolderKey,
   getLiveRecordInstanceId,
   getTaskAssignmentTaskIdsForInstances,
-  getTasksForTab,
   startMaestroCase,
   startTaskAssignmentProcess,
   startWorkerPtoProcess,
@@ -87,6 +87,7 @@ type DetailTab =
 
 type ToastTone = 'success' | 'info' | 'warning' | 'error';
 type LiveLoadState = 'idle' | 'loading' | 'ready' | 'error';
+type TimelineAuditSubtab = 'Maestro Instance' | 'Live Process';
 
 interface Toast {
   id: number;
@@ -404,6 +405,8 @@ const detailTabs: DetailTab[] = [
   'Timeline / Audit',
   'Raw Case JSON',
 ];
+
+const timelineAuditSubtabs: TimelineAuditSubtab[] = ['Maestro Instance', 'Live Process'];
 
 const liveActionTabByDetailTab: Partial<Record<DetailTab, LiveActionAppTab>> = {
   Summary: 'Summary',
@@ -2178,17 +2181,17 @@ function shouldShowExternalValidationResults(caseItem: BenefitCase, hasPendingTa
 
 function extractCpStepCode(value: string): string | null {
   const normalizedValue = value.toLowerCase();
-  const match = normalizedValue.match(/\bcp\s*([0-9]+(?:\.[0-9]+)?)\b/);
+  const match = normalizedValue.match(/\bcp\s*([0-9]+)\s*[._-]\s*([0-9]+)\b/);
 
-  return match ? `cp${match[1]}` : null;
+  return match ? `cp${match[1]}.${match[2]}` : null;
 }
 
 function getDefinitionCpStepCode(definition: ActionAppDefinition): string | null {
-  return extractCpStepCode(definition.name);
+  return definition.taskCode || extractCpStepCode(definition.name);
 }
 
-function getTaskCpStepCode(task: LiveTaskSummary): string | null {
-  return extractCpStepCode(task.searchText || [
+function getTaskPrimaryCpStepCode(task: LiveTaskSummary): string | null {
+  return extractCpStepCode([
     task.title,
     task.action,
     task.actionLabel,
@@ -2196,15 +2199,135 @@ function getTaskCpStepCode(task: LiveTaskSummary): string | null {
   ].filter(Boolean).join(' '));
 }
 
-function scoreTaskForActionDefinition(task: LiveTaskSummary, definition: ActionAppDefinition): number {
-  const searchText = task.searchText || [
+function getTaskCpStepCode(task: LiveTaskSummary): string | null {
+  return getTaskPrimaryCpStepCode(task) || extractCpStepCode(task.searchText || '');
+}
+
+function getTaskSearchText(task: LiveTaskSummary): string {
+  return (task.searchText || [
     task.title,
     task.action,
     task.actionLabel,
     task.appDefinition?.name,
     task.appDefinition?.appName,
-  ].filter(Boolean).join(' ').toLowerCase();
+  ].filter(Boolean).join(' ')).toLowerCase();
+}
+
+function taskMatchesActionDefinitionApp(task: LiveTaskSummary, definition: ActionAppDefinition): boolean {
+  const searchText = getTaskSearchText(task);
   const appId = definition.appId.toLowerCase();
+
+  return task.actionAppId?.toLowerCase() === appId
+    || task.appDefinition?.appId === definition.appId
+    || searchText.includes(appId)
+    || searchText.includes(definition.appName.toLowerCase());
+}
+
+function getDefinitionSequenceOrder(definition: ActionAppDefinition, fallbackIndex: number): number {
+  return definition.sequenceOrder ?? fallbackIndex + 1;
+}
+
+function compareLiveTasksByCreatedTime(left: LiveTaskSummary, right: LiveTaskSummary): number {
+  const leftTime = Date.parse(left.createdTime);
+  const rightTime = Date.parse(right.createdTime);
+  const normalizedLeftTime = Number.isFinite(leftTime) ? leftTime : Number.MAX_SAFE_INTEGER;
+  const normalizedRightTime = Number.isFinite(rightTime) ? rightTime : Number.MAX_SAFE_INTEGER;
+
+  return normalizedLeftTime - normalizedRightTime || left.id - right.id;
+}
+
+function assignTaskToDefinition(
+  definition: ActionAppDefinition,
+  task: LiveTaskSummary,
+  matchedDefinitions: Set<string>,
+  matchedTaskIds: Set<number>,
+  taskByDefinitionId: Map<string, LiveTaskSummary>,
+): void {
+  matchedDefinitions.add(definition.id);
+  matchedTaskIds.add(task.id);
+  taskByDefinitionId.set(definition.id, task);
+}
+
+function applySequentialActionTaskMatches(
+  tasks: LiveTaskSummary[],
+  matchedDefinitions: Set<string>,
+  matchedTaskIds: Set<number>,
+  taskByDefinitionId: Map<string, LiveTaskSummary>,
+): void {
+  const groupedDefinitions = new Map<string, Array<{ definition: ActionAppDefinition; definitionIndex: number }>>();
+
+  ACTION_APP_DEFINITIONS.forEach((definition, definitionIndex) => {
+    if (!definition.sequenceGroup) {
+      return;
+    }
+
+    const groupDefinitions = groupedDefinitions.get(definition.sequenceGroup) || [];
+    groupDefinitions.push({ definition, definitionIndex });
+    groupedDefinitions.set(definition.sequenceGroup, groupDefinitions);
+  });
+
+  groupedDefinitions.forEach((groupDefinitions) => {
+    if (groupDefinitions.length < 2) {
+      return;
+    }
+
+    const orderedDefinitions = [...groupDefinitions].sort((left, right) =>
+      getDefinitionSequenceOrder(left.definition, left.definitionIndex)
+        - getDefinitionSequenceOrder(right.definition, right.definitionIndex)
+      || left.definitionIndex - right.definitionIndex
+    );
+    const groupTasks = tasks
+      .filter((task) =>
+        !matchedTaskIds.has(task.id)
+        && orderedDefinitions.some(({ definition }) => taskMatchesActionDefinitionApp(task, definition))
+      )
+      .sort(compareLiveTasksByCreatedTime);
+    const shouldUseSequenceOrder = groupTasks.length > 1;
+
+    if (shouldUseSequenceOrder) {
+      for (const task of groupTasks) {
+        const nextDefinition = orderedDefinitions.find(({ definition }) => !matchedDefinitions.has(definition.id))?.definition;
+
+        if (!nextDefinition) {
+          break;
+        }
+
+        assignTaskToDefinition(nextDefinition, task, matchedDefinitions, matchedTaskIds, taskByDefinitionId);
+      }
+
+      return;
+    }
+
+    for (const task of groupTasks) {
+      const taskStepCode = getTaskPrimaryCpStepCode(task);
+      const exactDefinition = taskStepCode
+        ? orderedDefinitions.find(({ definition }) =>
+          !matchedDefinitions.has(definition.id)
+          && getDefinitionCpStepCode(definition) === taskStepCode
+        )?.definition
+        : null;
+
+      if (exactDefinition) {
+        assignTaskToDefinition(exactDefinition, task, matchedDefinitions, matchedTaskIds, taskByDefinitionId);
+      }
+    }
+
+    const remainingTasks = groupTasks.filter((task) => !matchedTaskIds.has(task.id));
+
+    for (const task of remainingTasks) {
+      const nextDefinition = orderedDefinitions.find(({ definition }) => !matchedDefinitions.has(definition.id))?.definition;
+
+      if (!nextDefinition) {
+        break;
+      }
+
+      assignTaskToDefinition(nextDefinition, task, matchedDefinitions, matchedTaskIds, taskByDefinitionId);
+    }
+  });
+}
+
+function scoreTaskForActionDefinition(task: LiveTaskSummary, definition: ActionAppDefinition): number {
+  const searchText = getTaskSearchText(task);
   const taskStepCode = getTaskCpStepCode(task);
   const definitionStepCode = getDefinitionCpStepCode(definition);
 
@@ -2215,9 +2338,7 @@ function scoreTaskForActionDefinition(task: LiveTaskSummary, definition: ActionA
   const definitionsUsingSameApp = ACTION_APP_DEFINITIONS.filter((candidate) =>
     candidate.appId === definition.appId
   ).length;
-  const sameActionApp = task.actionAppId?.toLowerCase() === appId
-    || task.appDefinition?.appId === definition.appId
-    || searchText.includes(appId);
+  const sameActionApp = taskMatchesActionDefinitionApp(task, definition);
   const appMatchScore = sameActionApp ? definitionsUsingSameApp > 1 ? 24 : 120 : 0;
   const stepCodeMatch = taskStepCode && definitionStepCode && taskStepCode === definitionStepCode ? 90 : 0;
   const inferredDefinitionMatch = task.appDefinition?.id === definition.id ? 60 : 0;
@@ -2244,8 +2365,15 @@ function buildActionTaskRows(tasks: LiveTaskSummary[]) {
   const matchedDefinitions = new Set<string>();
   const matchedTaskIds = new Set<number>();
   const taskByDefinitionId = new Map<string, LiveTaskSummary>();
+
+  applySequentialActionTaskMatches(tasks, matchedDefinitions, matchedTaskIds, taskByDefinitionId);
+
   const candidates = ACTION_APP_DEFINITIONS.flatMap((definition, definitionIndex) =>
-    tasks.map((task, taskIndex) => ({
+    matchedDefinitions.has(definition.id)
+      ? []
+      : tasks
+        .filter((task) => !matchedTaskIds.has(task.id))
+        .map((task, taskIndex) => ({
       definition,
       definitionIndex,
       task,
@@ -2269,15 +2397,32 @@ function buildActionTaskRows(tasks: LiveTaskSummary[]) {
       return;
     }
 
-    matchedDefinitions.add(candidate.definition.id);
-    matchedTaskIds.add(candidate.task.id);
-    taskByDefinitionId.set(candidate.definition.id, candidate.task);
+    assignTaskToDefinition(candidate.definition, candidate.task, matchedDefinitions, matchedTaskIds, taskByDefinitionId);
   });
 
   return ACTION_APP_DEFINITIONS.map((definition) => ({
     definition,
     task: taskByDefinitionId.get(definition.id) || null,
   }));
+}
+
+function hasMatchedLiveTask(row: { definition: ActionAppDefinition; task: LiveTaskSummary | null }): row is { definition: ActionAppDefinition; task: LiveTaskSummary } {
+  return Boolean(row.task);
+}
+
+function getMatchedActionTaskRows(tasks: LiveTaskSummary[]): Array<{ definition: ActionAppDefinition; task: LiveTaskSummary }> {
+  return buildActionTaskRows(tasks).filter(hasMatchedLiveTask);
+}
+
+function getActionTaskRowsForTab(
+  tasks: LiveTaskSummary[],
+  tab: LiveActionAppTab,
+): Array<{ definition: ActionAppDefinition; task: LiveTaskSummary }> {
+  return getMatchedActionTaskRows(tasks).filter(({ definition }) => definition.tab === tab);
+}
+
+function getLiveTasksForTab(tasks: LiveTaskSummary[], tab: LiveActionAppTab): LiveTaskSummary[] {
+  return getActionTaskRowsForTab(tasks, tab).map(({ task }) => task);
 }
 
 function isLiveTaskCompleted(task: LiveTaskSummary): boolean {
@@ -2294,7 +2439,7 @@ function liveTaskMatchesStatusFilter(task: LiveTaskSummary, filter: LiveTaskStat
 }
 
 function getLiveTaskDisplayName(task: LiveTaskSummary, definition?: ActionAppDefinition): string {
-  return task.appDefinition?.name || definition?.name || task.title || `Action Center task ${task.id}`;
+  return definition?.name || task.appDefinition?.name || task.title || `Action Center task ${task.id}`;
 }
 
 function mergeVisibleLiveTasks(currentTasks: LiveTaskSummary[], refreshedTasks: LiveTaskSummary[]): LiveTaskSummary[] {
@@ -2882,6 +3027,7 @@ function App() {
   const [screen, setScreen] = useState<Screen>('inbox');
   const [selectedCaseId, setSelectedCaseId] = useState('');
   const [activeTab, setActiveTab] = useState<DetailTab>('Summary');
+  const [activeTimelineAuditSubtab, setActiveTimelineAuditSubtab] = useState<TimelineAuditSubtab>('Maestro Instance');
   const [role, setRole] = useState<Role>('Case Worker');
   const [workerName, setWorkerName] = useState('Case Worker');
   const [countyScope, setCountyScope] = useState('All counties');
@@ -2930,6 +3076,7 @@ function App() {
   const [liveTasks, setLiveTasks] = useState<LiveTaskSummary[]>([]);
   const liveTasksRef = useRef<LiveTaskSummary[]>([]);
   const liveTasksScopeRef = useRef<{ caseId: string; instanceId: string | null }>({ caseId: '', instanceId: null });
+  const taskEmbedCompletionChecksRef = useRef<Set<number>>(new Set());
   const [liveTaskStatusFilter, setLiveTaskStatusFilter] = useState<LiveTaskStatusFilter>('all');
   const [liveTaskStatus, setLiveTaskStatus] = useState<LiveLoadState>('idle');
   const [liveTaskError, setLiveTaskError] = useState<string | null>(null);
@@ -2945,6 +3092,7 @@ function App() {
   const [documentBucketErrors, setDocumentBucketErrors] = useState<Record<string, string>>({});
   const [isApplicantResponsesOpen, setIsApplicantResponsesOpen] = useState(true);
   const isTaskEmbedOpen = Boolean(activeTaskEmbed || inlineTaskEmbed);
+  const activeEmbeddedTaskId = activeTaskEmbed?.taskId ?? inlineTaskEmbed?.taskId ?? null;
 
   const selectedCase = cases.find((caseItem) => caseItem.id === selectedCaseId)
     || cases[0]
@@ -3884,6 +4032,95 @@ function App() {
     return () => window.clearInterval(intervalId);
   }, [canUseUiPath, selectedInstanceId, isTaskEmbedOpen, refreshLiveRecords, refreshLiveTasks, refreshAssignmentLiveTasks]);
 
+  const checkTaskEmbedCompletion = useCallback(async (taskId: number): Promise<boolean> => {
+    if (!canUseUiPath || taskEmbedCompletionChecksRef.current.has(taskId)) {
+      return false;
+    }
+
+    taskEmbedCompletionChecksRef.current.add(taskId);
+    let isCompleted = false;
+
+    try {
+      const latestTask = await fetchLiveTaskById(sdk, taskId);
+
+      if (!latestTask || !isLiveTaskCompleted(latestTask)) {
+        return false;
+      }
+
+      isCompleted = true;
+      setLiveTasks((currentTasks) => {
+        const nextTasks = mergeVisibleLiveTasks(currentTasks, [latestTask]);
+        liveTasksRef.current = nextTasks;
+        return nextTasks;
+      });
+      setActiveTaskEmbed((current) => current?.taskId === taskId ? null : current);
+      setInlineTaskEmbed((current) => current?.taskId === taskId ? null : current);
+      showToast('Task completed.', 'success');
+      void refreshLiveRecords();
+      void refreshLiveTasks({ preserveVisibleTasks: true });
+      void refreshAssignmentLiveTasks();
+      return true;
+    } catch {
+      return false;
+    } finally {
+      if (!isCompleted) {
+        taskEmbedCompletionChecksRef.current.delete(taskId);
+      }
+    }
+  }, [canUseUiPath, refreshAssignmentLiveTasks, refreshLiveRecords, refreshLiveTasks, sdk, showToast]);
+
+  useEffect(() => {
+    if (!activeEmbeddedTaskId || !canUseUiPath) {
+      return undefined;
+    }
+
+    const checkActiveEmbed = () => {
+      void checkTaskEmbedCompletion(activeEmbeddedTaskId);
+    };
+    const messageLooksLikeTaskCompletion = (data: unknown): boolean => {
+      const text = typeof data === 'string'
+        ? data
+        : (() => {
+          try {
+            return JSON.stringify(data);
+          } catch {
+            return '';
+          }
+        })();
+      const normalizedText = text.toLowerCase();
+
+      return ['complete', 'completed', 'submit', 'submitted', 'success'].some((term) => normalizedText.includes(term))
+        && ['task', 'action', 'outcome'].some((term) => normalizedText.includes(term));
+    };
+    const isTrustedUiPathOrigin = (origin: string): boolean => {
+      try {
+        const host = new URL(origin).hostname.toLowerCase();
+        return host === window.location.hostname
+          || host.endsWith('uipath.com')
+          || host.endsWith('uipath.host');
+      } catch {
+        return false;
+      }
+    };
+    const handleTaskEmbedMessage = (event: MessageEvent) => {
+      if (!isTrustedUiPathOrigin(event.origin) || !messageLooksLikeTaskCompletion(event.data)) {
+        return;
+      }
+
+      checkActiveEmbed();
+    };
+    const intervalId = window.setInterval(checkActiveEmbed, 2_500);
+
+    window.addEventListener('focus', checkActiveEmbed);
+    window.addEventListener('message', handleTaskEmbedMessage);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', checkActiveEmbed);
+      window.removeEventListener('message', handleTaskEmbedMessage);
+    };
+  }, [activeEmbeddedTaskId, canUseUiPath, checkTaskEmbedCompletion]);
+
   const handleStartMaestroCase = async (
     caseItem: BenefitCase = simulatedApplicationCase,
     relatedScreen = 'Case Detail',
@@ -4123,11 +4360,9 @@ function App() {
       open: liveTasks.filter((task) => !isLiveTaskCompleted(task)).length,
       completed: liveTasks.filter(isLiveTaskCompleted).length,
     };
-    const allTaskRows = buildActionTaskRows(liveTasks)
-      .filter(({ task }) => Boolean(task)) as Array<{ definition: ActionAppDefinition; task: LiveTaskSummary }>;
+    const allTaskRows = getMatchedActionTaskRows(liveTasks);
     const taskRows = allTaskRows
-      .filter(({ task }) => liveTaskMatchesStatusFilter(task, liveTaskStatusFilter))
-      .filter(({ task }) => Boolean(task)) as Array<{ definition: ActionAppDefinition; task: LiveTaskSummary }>;
+      .filter(({ task }) => liveTaskMatchesStatusFilter(task, liveTaskStatusFilter));
     const matchedTaskIds = new Set(
       taskRows
         .map(({ task }) => task.id),
@@ -4299,20 +4534,20 @@ function App() {
   };
 
   const LiveTabTaskPanel = ({ tab }: { tab: LiveActionAppTab }) => {
-    const tabTasks = getTasksForTab(liveTasks, tab);
-    const openTabTasks = tabTasks.filter((task) => !isLiveTaskCompleted(task));
-    const completedTabTasks = tabTasks.filter((task) => isLiveTaskCompleted(task));
-    const taskSummary = openTabTasks.length > 0
-      ? completedTabTasks.length > 0
-        ? `${openTabTasks.length} ready, ${completedTabTasks.length} completed.`
-        : openTabTasks.length === 1
-          ? `Task ${openTabTasks[0]?.id} is ready.`
-          : `${openTabTasks.length} tasks are ready.`
-      : completedTabTasks.length === 1
-        ? `Task ${completedTabTasks[0]?.id} is completed.`
-        : `${completedTabTasks.length} tasks are completed.`;
+    const tabTaskRows = getActionTaskRowsForTab(liveTasks, tab);
+    const openTabTaskRows = tabTaskRows.filter(({ task }) => !isLiveTaskCompleted(task));
+    const completedTabTaskRows = tabTaskRows.filter(({ task }) => isLiveTaskCompleted(task));
+    const taskSummary = openTabTaskRows.length > 0
+      ? completedTabTaskRows.length > 0
+        ? `${openTabTaskRows.length} ready, ${completedTabTaskRows.length} completed.`
+        : openTabTaskRows.length === 1
+          ? `Task ${openTabTaskRows[0]?.task.id} is ready.`
+          : `${openTabTaskRows.length} tasks are ready.`
+      : completedTabTaskRows.length === 1
+        ? `Task ${completedTabTaskRows[0]?.task.id} is completed.`
+        : `${completedTabTaskRows.length} tasks are completed.`;
 
-    if (!isMaestroLoaded || tabTasks.length === 0) {
+    if (!isMaestroLoaded || tabTaskRows.length === 0) {
       return null;
     }
 
@@ -4326,12 +4561,12 @@ function App() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {openTabTasks.map((task) => (
-              <ActionButton key={task.id} variant="primary" onClick={() => handleOpenTask(task, 'inline')}>
-                Open {getLiveTaskDisplayName(task)}
+            {openTabTaskRows.map(({ definition, task }) => (
+              <ActionButton key={task.id} variant="primary" onClick={() => handleOpenTask(task, 'inline', definition)}>
+                Open {getLiveTaskDisplayName(task, definition)}
               </ActionButton>
             ))}
-            {completedTabTasks.map((task) => (
+            {completedTabTaskRows.map(({ task }) => (
               <CompletedTaskBadge key={task.id} />
             ))}
             <ActionButton
@@ -4361,6 +4596,7 @@ function App() {
               src={inlineTaskEmbed.embedUrl}
               title={inlineTaskEmbed.title}
               className="h-[72vh] min-h-[38rem] w-full border-0 bg-white"
+              onLoad={() => void checkTaskEmbedCompletion(inlineTaskEmbed.taskId)}
             />
           </div>
         )}
@@ -4575,6 +4811,7 @@ function App() {
           src={activeTaskEmbed.embedUrl}
           title={activeTaskEmbed.title}
           className="w-full flex-1 border-0"
+          onLoad={() => void checkTaskEmbedCompletion(activeTaskEmbed.taskId)}
         />
       </div>
     </div>
@@ -5761,7 +5998,7 @@ function App() {
 
   const InterviewTab = () => {
     const isLiveCase = Boolean(matchedLiveRecord);
-    const interviewTasks = getTasksForTab(liveTasks, 'Interview / Missing Info');
+    const interviewTasks = getLiveTasksForTab(liveTasks, 'Interview / Missing Info');
     const conductedAt = matchedLiveRecord
       ? readRecordString(matchedLiveRecord, liveInterviewFieldKeys.completedAt)
       : null;
@@ -5998,7 +6235,7 @@ function App() {
   };
 
   const ClearanceTab = () => {
-    const clearanceTasks = getTasksForTab(liveTasks, 'Clearance');
+    const clearanceTasks = getLiveTasksForTab(liveTasks, 'Clearance');
     const hasPendingClearanceTask = clearanceTasks.some((task) => !isLiveTaskCompleted(task));
     const showClearanceResults = shouldShowClearanceResults(selectedCase, hasPendingClearanceTask);
     const clearancePlaceholderStatus = hasPendingClearanceTask ? 'Awaiting Approval' : 'Not Started';
@@ -6084,7 +6321,7 @@ function App() {
   };
 
   const ExternalValidationTab = () => {
-    const validationTasks = getTasksForTab(liveTasks, 'External Validation');
+    const validationTasks = getLiveTasksForTab(liveTasks, 'External Validation');
     const hasPendingValidationTask = validationTasks.some((task) => !isLiveTaskCompleted(task));
     const showValidationResults = shouldShowExternalValidationResults(selectedCase, hasPendingValidationTask);
     const validationPlaceholderStatus = hasPendingValidationTask ? 'Awaiting Approval' : 'Not Started';
@@ -6240,16 +6477,68 @@ function App() {
     );
   };
 
-  const TimelineTab = () => (
-    <MaestroInstanceDiagram
-      sdk={sdk}
-      canUseUiPath={canUseUiPath}
-      instanceId={selectedInstanceId || null}
-      folderKey={selectedMaestroFolderKey}
-      caseNumber={selectedCase.mybNumber}
-      onOpenMaestro={handleOpenMaestro}
-    />
-  );
+  const TimelineTab = () => {
+    const maestroInstanceUrl = selectedInstanceId
+      ? buildMaestroInstanceUrl(selectedInstanceId, selectedMaestroFolderKey)
+      : null;
+
+    return (
+      <div className="space-y-6">
+        <div className="border-b border-gray-200">
+          <nav className="-mb-px flex flex-wrap gap-3" aria-label="Timeline audit subtabs">
+            {timelineAuditSubtabs.map((subtab) => {
+              const isActiveSubtab = activeTimelineAuditSubtab === subtab;
+              return (
+                <button
+                  key={subtab}
+                  type="button"
+                  onClick={() => setActiveTimelineAuditSubtab(subtab)}
+                  className={`border-b-2 px-1 pb-3 text-sm font-semibold ${
+                    isActiveSubtab
+                      ? 'border-blue-600 text-blue-700'
+                      : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                  }`}
+                >
+                  {subtab}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+
+        {activeTimelineAuditSubtab === 'Live Process' ? (
+          <MaestroInstanceDiagram
+            sdk={sdk}
+            canUseUiPath={canUseUiPath}
+            instanceId={selectedInstanceId || null}
+            folderKey={selectedMaestroFolderKey}
+            caseNumber={selectedCase.mybNumber}
+          />
+        ) : (
+          <SectionCard title="Maestro Instance">
+            {maestroInstanceUrl ? (
+              <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+                <iframe
+                  title={`Maestro instance ${selectedInstanceId}`}
+                  src={maestroInstanceUrl}
+                  className="h-[44rem] w-full border-0"
+                  allow="clipboard-read; clipboard-write"
+                  referrerPolicy="no-referrer"
+                />
+              </div>
+            ) : (
+              <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-6 text-sm">
+                <p className="font-semibold text-gray-900">No linked Maestro instance</p>
+                <p className="mt-1 text-gray-600">
+                  This case does not have a Maestro instance available to embed yet.
+                </p>
+              </div>
+            )}
+          </SectionCard>
+        )}
+      </div>
+    );
+  };
 
   const RawJsonTab = () => (
     <div className="space-y-6">
